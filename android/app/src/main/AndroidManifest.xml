@@ -26,6 +26,10 @@
         android:usesCleartextTraffic="true"
         android:allowBackup="false"
         android:fullBackupContent="false">
+        <!-- Flutter v2 Embedding (必需) -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
         
         <activity
             android:name=".MainActivity"
