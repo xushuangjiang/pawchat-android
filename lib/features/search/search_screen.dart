@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../core/models/message.dart';
 import 'service/message_search_service.dart';
 import '../../../core/storage/local_storage.dart';
 

@@ -87,7 +87,7 @@ class GatewayClient {
       onDone: () {
         _updateStatus(ConnectionStatus.disconnected);
         _messageController.add(GatewayMessage(
-          type: 'system',
+          type: GatewayMessageType.system,
           event: 'disconnected',
         ));
       },

@@ -398,7 +398,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       
       // 合并并去重（基于时间戳）
       final allMessages = {...history, ...gatewayHistory}.toList()
-        ..sort((a, b) => a.timestamp?.compareTo(b.timestamp ?? DateTime.now()) ?? 0);
+        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
       
       // 保存到缓存
       if (_storage != null && allMessages.isNotEmpty) {
