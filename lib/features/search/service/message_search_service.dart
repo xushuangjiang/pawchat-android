@@ -31,7 +31,7 @@ class MessageSearchService {
     // 获取要搜索的会话列表
     final sessions = sessionKey != null
         ? [sessionKey]
-        : await _storage.getAllSessions();
+        : (await _storage.getAllSessions()) ?? [];
 
     for (final session in sessions) {
       final messages = await _storage.loadMessages(session);
