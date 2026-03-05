@@ -111,7 +111,7 @@ class _MessageInputState extends State<MessageInput> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
+              color: theme.colorScheme.surfaceVariant,
               borderRadius: BorderRadius.circular(24),
             ),
             child: TextField(

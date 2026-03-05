@@ -179,7 +179,7 @@ class ToolCallDisplay extends StatelessWidget {
           decoration: BoxDecoration(
             color: isSuccess 
                 ? theme.colorScheme.secondaryContainer.withOpacity(0.3)
-                : theme.colorScheme.surfaceContainerHighest,
+                : theme.colorScheme.surfaceVariant,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(

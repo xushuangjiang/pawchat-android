@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'chat_bloc.dart';
+import '../bloc/chat_bloc.dart';
 import 'message_list.dart';
 import 'message_input.dart';
 import '../../../core/websocket/gateway_client.dart';
