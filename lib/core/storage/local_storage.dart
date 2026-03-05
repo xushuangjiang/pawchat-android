@@ -92,6 +92,15 @@ class LocalStorage {
     return _prefs.getString(_keyLastSession);
   }
   
+  /// 获取所有会话 key
+  List<String> getAllSessions() {
+    final keys = _prefs.getKeys();
+    return keys
+        .where((key) => key.startsWith('$_keyMessages:'))
+        .map((key) => key.substring('$_keyMessages:'.length))
+        .toList();
+  }
+  
   // ========== 工具方法 ==========
   
   /// 清除所有数据
