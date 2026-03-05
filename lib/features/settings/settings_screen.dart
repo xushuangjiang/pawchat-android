@@ -9,10 +9,11 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late TextEditingController _urlController;
-  late TextEditingController _tokenController;
+  TextEditingController? _urlController;
+  TextEditingController? _tokenController;
   bool _useSecure = false;
   bool _autoConnect = false;
+  bool _isLoading = true;
   
   @override
   void initState() {
@@ -31,13 +32,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       _useSecure = prefs.getBool('gateway_secure') ?? false;
       _autoConnect = prefs.getBool('auto_connect') ?? false;
+      _isLoading = false;
     });
   }
   
   Future<void> _saveSettings() async {
+    if (_urlController == null || _tokenController == null) return;
+    
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('gateway_url', _urlController.text.trim());
-    await prefs.setString('gateway_token', _tokenController.text.trim());
+    await prefs.setString('gateway_url', _urlController!.text.trim());
+    await prefs.setString('gateway_token', _tokenController!.text.trim());
     await prefs.setBool('gateway_secure', _useSecure);
     await prefs.setBool('auto_connect', _autoConnect);
     
@@ -53,14 +57,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   
   @override
   void dispose() {
-    _urlController.dispose();
-    _tokenController.dispose();
+    _urlController?.dispose();
+    _tokenController?.dispose();
     super.dispose();
   }
   
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('设置'),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
     
     return Scaffold(
       appBar: AppBar(

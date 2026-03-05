@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../../features/chat/bloc/chat_bloc.dart';
-import '../../features/chat/data/message.dart';
+import '../../core/models/message.dart';
 import 'notification_service.dart';
 
 /// 消息通知监听器

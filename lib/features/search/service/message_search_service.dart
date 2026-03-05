@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-
 import '../../../core/storage/local_storage.dart';
-import '../../../features/chat/data/message.dart';
+import '../../../core/models/message.dart';
 
 /// 消息搜索服务
 /// 
@@ -9,23 +8,24 @@ import '../../../features/chat/data/message.dart';
 class MessageSearchService {
   final LocalStorage _storage;
 
-  MessageSearchService({required LocalStorage storage})
-      : _storage = storage;
+  MessageSearchService({required LocalStorage storage}) : _storage = storage;
 
   /// 搜索消息
   /// 
   /// [query] - 搜索关键词
   /// [sessionKey] - 可选，限制在特定会话中搜索
   /// [limit] - 最大返回结果数
-  Future<List<SearchedMessage>> search({
+  Future<List<SearchResult>> search({
     required String query,
     String? sessionKey,
     int limit = 50,
   }) async {
     debugPrint('[MessageSearch] 搜索："$query" in ${sessionKey ?? "all sessions"}');
 
+    if (query.trim().isEmpty) return [];
+
     final queryLower = query.toLowerCase();
-    final results = <SearchedMessage>[];
+    final results = <SearchResult>[];
 
     // 获取要搜索的会话列表
     final sessions = sessionKey != null
@@ -33,24 +33,16 @@ class MessageSearchService {
         : await _storage.getAllSessions();
 
     for (final session in sessions) {
-      final chatMessages = await _storage.loadMessages(session) ?? [];
+      final messages = _storage.loadMessages(session) ?? [];
       
-      for (final chatMessage in chatMessages) {
-        // 将 ChatMessage 转换为 Message (ChatMessage 没有 messageId 字段，使用 content 作为唯一标识)
-        final message = Message(
-          id: chatMessage.content, // 使用 content 作为临时 id
-          role: chatMessage.role,
-          content: chatMessage.content,
-          timestamp: chatMessage.timestamp,
-        );
-        
+      for (final message in messages) {
         final content = message.content.toLowerCase();
         if (content.contains(queryLower)) {
           // 找到匹配位置
           final matchStart = content.indexOf(queryLower);
           final context = _extractContext(content, matchStart, query.length);
           
-          results.add(SearchedMessage(
+          results.add(SearchResult(
             message: message,
             sessionKey: session,
             matchStart: matchStart,
@@ -58,18 +50,78 @@ class MessageSearchService {
             context: context,
           ));
 
-          if (results.length >= limit) {
-            break;
-          }
+          if (results.length >= limit) break;
         }
       }
 
-      if (results.length >= limit) {
-        break;
-      }
+      if (results.length >= limit) break;
     }
 
     debugPrint('[MessageSearch] 找到 ${results.length} 条结果');
+    return results;
+  }
+
+  /// 高级搜索 - 支持多个条件
+  Future<List<SearchResult>> advancedSearch({
+    String? keyword,
+    String? sessionKey,
+    MessageRole? role,
+    DateTime? startDate,
+    DateTime? endDate,
+    int limit = 50,
+  }) async {
+    final results = <SearchResult>[];
+    final sessions = sessionKey != null
+        ? [sessionKey]
+        : await _storage.getAllSessions();
+
+    for (final session in sessions) {
+      final messages = _storage.loadMessages(session) ?? [];
+      
+      for (final message in messages) {
+        // 角色过滤
+        if (role != null && message.role != role) continue;
+        
+        // 日期范围过滤
+        if (startDate != null && message.timestamp.isBefore(startDate)) continue;
+        if (endDate != null && message.timestamp.isAfter(endDate)) continue;
+        
+        // 关键词过滤
+        if (keyword != null && keyword.isNotEmpty) {
+          final content = message.content.toLowerCase();
+          final queryLower = keyword.toLowerCase();
+          
+          if (!content.contains(queryLower)) continue;
+          
+          final matchStart = content.indexOf(queryLower);
+          final context = _extractContext(content, matchStart, keyword.length);
+          
+          results.add(SearchResult(
+            message: message,
+            sessionKey: session,
+            matchStart: matchStart,
+            matchLength: keyword.length,
+            context: context,
+          ));
+        } else {
+          // 无关键词，只按其他条件过滤
+          results.add(SearchResult(
+            message: message,
+            sessionKey: session,
+            matchStart: 0,
+            matchLength: 0,
+            context: message.content.length > 100 
+                ? '${message.content.substring(0, 100)}...'
+                : message.content,
+          ));
+        }
+
+        if (results.length >= limit) break;
+      }
+
+      if (results.length >= limit) break;
+    }
+
     return results;
   }
 
@@ -137,7 +189,7 @@ class MessageSearchService {
 }
 
 /// 搜索结果
-class SearchedMessage {
+class SearchResult {
   /// 原始消息
   final Message message;
 
@@ -153,7 +205,7 @@ class SearchedMessage {
   /// 上下文 (包含匹配内容的前后文本)
   final String context;
 
-  SearchedMessage({
+  const SearchResult({
     required this.message,
     required this.sessionKey,
     required this.matchStart,
@@ -166,5 +218,17 @@ class SearchedMessage {
     final date = message.timestamp;
     return '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} '
            '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// 获取相对时间
+  String get relativeTime {
+    final now = DateTime.now();
+    final diff = now.difference(message.timestamp);
+    
+    if (diff.inMinutes < 1) return '刚刚';
+    if (diff.inHours < 1) return '${diff.inMinutes} 分钟前';
+    if (diff.inDays < 1) return '${diff.inHours} 小时前';
+    if (diff.inDays < 7) return '${diff.inDays} 天前';
+    return displayTime;
   }
 }

@@ -263,8 +263,8 @@ Future<Map<String, dynamic>> sendMessage({
 ## 状态追踪
 
 - 创建日期：2026-03-05
-- 状态：核心功能开发完成 (v1.0)
-- 完成度：49% (51/104 功能)
+- 状态：核心功能开发完成 (v1.0)，v1.1 功能已实现待集成
+- 完成度：约 65% (68/104 功能)
 
 ### 已完成 (v1.0)
 - ✅ WebSocket 客户端 (`gateway_client.dart`)
@@ -283,11 +283,29 @@ Future<Map<String, dynamic>> sendMessage({
 - ✅ 消息缓存
 - ✅ 深色主题
 
-### v1.1 计划
-- [ ] 自动重连机制
-- [ ] 消息搜索
-- [ ] 附件上传
-- [ ] 推送通知
+### v1.1 - 已实现待集成 ⚠️
+以下功能模块已实现，但需要在主流程中集成和测试：
+
+| 功能 | 状态 | 文件 | 说明 |
+|------|------|------|------|
+| **自动重连** | ⚠️ 已实现待集成 | `reconnect_manager.dart` | 指数退避策略、最大重试次数、状态回调已就绪，需接入 GatewayClient |
+| **消息搜索** | ⚠️ 已实现待集成 | `search_screen.dart`, `message_search_service.dart` | 本地缓存搜索、高亮匹配、结果展示已就绪，需添加导航入口 |
+| **附件选择** | ⚠️ 已实现待集成 | `attachment_picker.dart`, `attachment_service.dart` | 图片选择、拍照、预览已就绪，实际上传 API 待 Gateway 支持 |
+| **推送通知** | ⚠️ 已实现待集成 | `notification_service.dart`, `message_notification_listener.dart` | 本地通知、权限管理已就绪，需与应用生命周期联动 |
+
+#### v1.1 集成任务清单
+- [ ] 将 ReconnectManager 集成到 GatewayClient，处理断线自动重连
+- [ ] 在 ChatScreen 中添加重连指示器 UI (`reconnect_indicator.dart`)
+- [ ] 添加搜索页面入口（AppBar 搜索按钮或手势）
+- [ ] 将 AttachmentPicker 集成到 MessageInput，支持发送图片
+- [ ] 初始化 NotificationService，请求权限，绑定消息监听
+- [ ] 处理应用前后台状态，控制通知显示逻辑
+
+### v1.2 计划
+- [ ] 网络状态监听（WiFi/移动数据切换检测）
+- [ ] 消息导出/备份功能
+- [ ] 会话归档/删除
+- [ ] 性能优化（大图加载、长列表优化）
 
 ### v2.0 愿景
 - [ ] 语音输入

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/di/service_locator.dart';
+import '../../../core/models/message.dart';
 import '../bloc/chat_bloc.dart';
 import 'message_list.dart';
 import 'message_input.dart';
-import '../../../core/websocket/gateway_client.dart';
-import '../../../core/websocket/protocol.dart';
+import 'reconnect_indicator.dart';
 import '../../settings/settings_screen.dart';
 import '../../sessions/sessions_screen.dart';
 
@@ -14,121 +15,135 @@ class ChatScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => ChatBloc(GatewayClient()),
+      create: (_) => ChatBloc(getIt<GatewayClient>()),
       child: const ChatView(),
     );
   }
 }
 
-class ChatView extends StatelessWidget {
+class ChatView extends StatefulWidget {
   const ChatView({super.key});
-  
+
+  @override
+  State<ChatView> createState() => _ChatViewState();
+}
+
+class _ChatViewState extends State<ChatView> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('PawChat 🐾'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        leading: IconButton(
-          icon: const Icon(Icons.list),
-          tooltip: '会话列表',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SessionsScreen()),
-            );
-          },
-        ),
-        actions: [
-          // 连接状态指示器
-          BlocBuilder<ChatBloc, ChatState>(
-            builder: (context, state) {
-              IconData icon;
-              Color color;
-              
-              if (state is ChatConnected || state is ChatStreaming) {
-                icon = Icons.cloud_done;
-                color = Colors.green;
-              } else if (state is ChatLoading) {
-                icon = Icons.cloud_sync;
-                color = Colors.orange;
-              } else if (state is ChatPairingRequired) {
-                icon = Icons.cloud_off;
-                color = Colors.red;
-              } else {
-                icon = Icons.cloud_off;
-                color = Colors.grey;
-              }
-              
-              return Padding(
-                padding: const EdgeInsets.only(right: 16.0),
-                child: Icon(icon, color: color, size: 24),
-              );
-            },
-          ),
-          // 设置按钮
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: '设置',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
-            },
-          ),
-        ],
-      ),
+      appBar: _buildAppBar(),
       body: BlocConsumer<ChatBloc, ChatState>(
-        listener: (context, state) {
-          if (state is ChatError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: Colors.red,
-              ),
-            );
-          } else if (state is ChatPairingRequired) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('需要设备配对！请在 Gateway 批准此设备'),
-                backgroundColor: Colors.orange,
-                duration: Duration(seconds: 5),
-              ),
-            );
-          }
-        },
+        listener: _handleStateChanges,
         builder: (context, state) {
-          if (state is ChatInitial) {
-            return _buildDisconnectedState(context);
-          } else if (state is ChatLoading) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('正在连接 Gateway...'),
-                ],
+          return Column(
+            children: [
+              // 重连指示器
+              if (state is ChatConnected && state.isReconnecting)
+                ReconnectIndicator(
+                  isReconnecting: state.isReconnecting,
+                  attempt: state.reconnectAttempt,
+                ),
+              // 主内容区域
+              Expanded(
+                child: _buildBody(state),
               ),
-            );
-          } else if (state is ChatPairingRequired) {
-            return _buildPairingState(context);
-          } else if (state is ChatConnected || state is ChatStreaming) {
-            return _buildChatState(context, state);
-          } else if (state is ChatError) {
-            return _buildErrorState(context, state);
-          }
-          
-          return const Center(
-            child: Text('未知状态'),
+            ],
           );
         },
       ),
     );
   }
-  
-  Widget _buildDisconnectedState(BuildContext context) {
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      title: const Text('PawChat 🐾'),
+      leading: IconButton(
+        icon: const Icon(Icons.list),
+        tooltip: '会话列表',
+        onPressed: () => _navigateToSessions(),
+      ),
+      actions: [
+        // 连接状态指示器
+        BlocBuilder<ChatBloc, ChatState>(
+          builder: (context, state) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: _buildConnectionStatus(state),
+            );
+          },
+        ),
+        // 设置按钮
+        IconButton(
+          icon: const Icon(Icons.settings),
+          tooltip: '设置',
+          onPressed: () => _navigateToSettings(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConnectionStatus(ChatState state) {
+    IconData icon;
+    Color color;
+    String tooltip;
+    
+    switch (state.runtimeType) {
+      case ChatConnected:
+        final connected = state as ChatConnected;
+        if (connected.isReconnecting) {
+          icon = Icons.cloud_sync;
+          color = Colors.orange;
+          tooltip = '正在重连...';
+        } else {
+          icon = Icons.cloud_done;
+          color = Colors.green;
+          tooltip = '已连接';
+        }
+        break;
+      case ChatLoading:
+        icon = Icons.cloud_sync;
+        color = Colors.orange;
+        tooltip = '连接中...';
+        break;
+      case ChatPairingRequired:
+        icon = Icons.cloud_off;
+        color = Colors.red;
+        tooltip = '需要配对';
+        break;
+      default:
+        icon = Icons.cloud_off;
+        color = Colors.grey;
+        tooltip = '未连接';
+    }
+    
+    return Tooltip(
+      message: tooltip,
+      child: Icon(icon, color: color, size: 24),
+    );
+  }
+
+  Widget _buildBody(ChatState state) {
+    return switch (state) {
+      ChatInitial() => _buildDisconnectedState(),
+      ChatLoading() => _buildLoadingState(),
+      ChatPairingRequired() => _buildPairingState(),
+      ChatConnected() => _buildChatState(state),
+      ChatStreaming() => _buildChatState(state),
+      ChatError() => _buildErrorState(state),
+      _ => const Center(child: Text('未知状态')),
+    };
+  }
+
+  Widget _buildDisconnectedState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -146,9 +161,7 @@ class ChatView extends StatelessWidget {
           ),
           const SizedBox(height: 32),
           ElevatedButton.icon(
-            onPressed: () {
-              _showConnectionDialog(context);
-            },
+            onPressed: () => _showConnectionDialog(),
             icon: const Icon(Icons.cloud_sync),
             label: const Text('连接 Gateway'),
             style: ElevatedButton.styleFrom(
@@ -159,8 +172,21 @@ class ChatView extends StatelessWidget {
       ),
     );
   }
-  
-  Widget _buildPairingState(BuildContext context) {
+
+  Widget _buildLoadingState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('正在连接 Gateway...'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPairingState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -202,9 +228,7 @@ class ChatView extends StatelessWidget {
           ),
           const SizedBox(height: 32),
           ElevatedButton.icon(
-            onPressed: () {
-              context.read<ChatBloc>().add(const ChatDisconnect());
-            },
+            onPressed: () => context.read<ChatBloc>().add(const ChatDisconnect()),
             icon: const Icon(Icons.refresh),
             label: const Text('重试连接'),
           ),
@@ -212,42 +236,39 @@ class ChatView extends StatelessWidget {
       ),
     );
   }
-  
-  Widget _buildChatState(BuildContext context, ChatState state) {
-    final messages = (state is ChatConnected) 
-        ? (state as ChatConnected).messages 
-        : (state is ChatStreaming) 
-            ? (state as ChatStreaming).messages 
-            : <ChatMessage>[];
-    
+
+  Widget _buildChatState(ChatState state) {
+    final messages = switch (state) {
+      ChatConnected() => state.messages,
+      ChatStreaming() => state.messages,
+      _ => <Message>[],
+    };
+
+    final streamingContent = state is ChatStreaming ? state.streamingContent : null;
+
     return Column(
       children: [
-        // 消息列表
         Expanded(
           child: MessageList(
             messages: messages,
-            streamingContent: state is ChatStreaming 
-                ? (state as ChatStreaming).streamingContent 
-                : null,
+            streamingContent: streamingContent,
+            scrollController: _scrollController,
           ),
         ),
-        // 输入框
         MessageInput(
           onSend: (content) {
             context.read<ChatBloc>().add(ChatSendMessage(content));
           },
           onAbort: state is ChatStreaming
-              ? () {
-                  context.read<ChatBloc>().add(const ChatAbort());
-                }
+              ? () => context.read<ChatBloc>().add(const ChatAbort())
               : null,
           isStreaming: state is ChatStreaming,
         ),
       ],
     );
   }
-  
-  Widget _buildErrorState(BuildContext context, ChatError state) {
+
+  Widget _buildErrorState(ChatError state) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -269,9 +290,7 @@ class ChatView extends StatelessWidget {
           ),
           const SizedBox(height: 32),
           ElevatedButton.icon(
-            onPressed: () {
-              context.read<ChatBloc>().add(const ChatDisconnect());
-            },
+            onPressed: () => context.read<ChatBloc>().add(const ChatDisconnect()),
             icon: const Icon(Icons.refresh),
             label: const Text('重新连接'),
           ),
@@ -279,8 +298,47 @@ class ChatView extends StatelessWidget {
       ),
     );
   }
-  
-  void _showConnectionDialog(BuildContext context) {
+
+  void _handleStateChanges(BuildContext context, ChatState state) {
+    if (state is ChatError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(state.message),
+          backgroundColor: state.isFatal ? Colors.red : Colors.orange,
+          action: state.isFatal
+              ? SnackBarAction(
+                  label: '重试',
+                  onPressed: () => context.read<ChatBloc>().add(const ChatReconnect()),
+                )
+              : null,
+        ),
+      );
+    } else if (state is ChatPairingRequired) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('需要设备配对！请在 Gateway 批准此设备'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+
+  void _navigateToSessions() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SessionsScreen()),
+    );
+  }
+
+  void _navigateToSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SettingsScreen()),
+    );
+  }
+
+  void _showConnectionDialog() {
     final urlController = TextEditingController(text: 'ws://192.168.1.100:18789');
     final tokenController = TextEditingController();
     

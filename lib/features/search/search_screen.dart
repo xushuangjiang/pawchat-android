@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../chat/bloc/chat_bloc.dart';
-import '../chat/presentation/message_bubble.dart';
 import 'service/message_search_service.dart';
 import '../../core/storage/local_storage.dart';
 
@@ -196,7 +193,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildSearchResultTile(SearchedMessage result) {
-    final isUser = result.message.role == 'user';
+    final isUser = result.chatMessage.role == 'user';
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -261,7 +258,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  result.message.content,
+                  result.chatMessage.content,
                   style: const TextStyle(fontSize: 13),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
