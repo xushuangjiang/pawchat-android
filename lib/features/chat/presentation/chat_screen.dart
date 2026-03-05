@@ -4,6 +4,7 @@ import '../bloc/chat_bloc.dart';
 import 'message_list.dart';
 import 'message_input.dart';
 import '../../../core/websocket/gateway_client.dart';
+import '../../../core/websocket/protocol.dart';
 import '../../settings/settings_screen.dart';
 import '../../sessions/sessions_screen.dart';
 

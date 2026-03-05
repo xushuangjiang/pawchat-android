@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../../core/storage/local_storage.dart';
-import '../../chat/data/message.dart';
+import '../../../core/storage/local_storage.dart';
+import '../../../features/chat/data/message.dart';
 
 /// 消息搜索服务
 /// 
