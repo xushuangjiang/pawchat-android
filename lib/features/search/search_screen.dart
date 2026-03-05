@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import '../../../core/di/service_locator.dart';
 import 'service/message_search_service.dart';
 import '../../core/storage/local_storage.dart';
 
@@ -15,7 +15,7 @@ class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   
-  List<SearchedMessage> _results = [];
+  List<SearchResult> _results = [];
   bool _isSearching = false;
   String? _error;
   
@@ -192,8 +192,8 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildSearchResultTile(SearchedMessage result) {
-    final isUser = result.chatMessage.role == 'user';
+  Widget _buildSearchResultTile(SearchResult result) {
+    final isUser = result.message.role == MessageRole.user;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),

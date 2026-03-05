@@ -8,6 +8,7 @@ import '../models/message.dart';
 class LocalStorage {
   static const String _messagesBoxName = 'messages';
   static const String _settingsBoxName = 'settings';
+  static const String _sessionsBoxName = 'sessions';
   
   Box<List<dynamic>>? _messagesBox;
   Box<dynamic>? _settingsBox;

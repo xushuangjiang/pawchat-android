@@ -124,7 +124,7 @@ class GatewayClient {
   }
   
   /// 获取聊天历史
-  Future<List<ChatMessage>> getChatHistory({
+  Future<List<Message>> getChatHistory({
     String? sessionKey,
     int limit = 50,
   }) async {
@@ -143,7 +143,7 @@ class GatewayClient {
     _channel!.sink.add(jsonEncode(payload));
     
     final response = await messages
-        .where((msg) => msg.type == 'response' && msg.data?['method'] == 'chat.history')
+        .where((msg) => msg.type == GatewayMessageType.response && msg.data?['method'] == 'chat.history')
         .timeout(const Duration(seconds: 30))
         .first;
     
@@ -151,7 +151,7 @@ class GatewayClient {
     if (history == null) return [];
     
     return history
-        .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+        .map((e) => Message.fromJson(e as Map<String, dynamic>))
         .toList();
   }
   

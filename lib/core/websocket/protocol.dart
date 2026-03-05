@@ -213,7 +213,7 @@ class ToolCallEvent {
       status: ToolCallStatus.fromString(json['status'] as String? ?? 'unknown'),
       timestamp: json['timestamp'] != null 
           ? DateTime.parse(json['timestamp'] as String)
-          : null,
+          : DateTime.now(),
       duration: json['durationMs'] != null
           ? Duration(milliseconds: json['durationMs'] as int)
           : null,
@@ -260,4 +260,19 @@ enum ToolCallStatus {
         return '未知';
     }
   }
+}
+
+/// 会话信息
+class SessionInfo {
+  final String sessionKey;
+  final String title;
+  final DateTime lastActive;
+  final int messageCount;
+
+  const SessionInfo({
+    required this.sessionKey,
+    required this.title,
+    required this.lastActive,
+    required this.messageCount,
+  });
 }

@@ -102,16 +102,18 @@ class ChatConnect extends ChatEvent {
   final String? token;
   final String? password;
   final bool autoReconnect;
+  final bool fromCache;
   
   const ChatConnect({
     required this.url,
     this.token,
     this.password,
     this.autoReconnect = true,
+    this.fromCache = true,
   });
   
   @override
-  List<Object?> get props => [url, token, password, autoReconnect];
+  List<Object?> get props => [url, token, password, autoReconnect, fromCache];
 }
 
 class ChatSendMessage extends ChatEvent {
@@ -171,6 +173,15 @@ class _ChatStatusChanged extends ChatEvent {
   
   @override
   List<Object?> get props => [status];
+}
+
+class _ChatConnectionError extends ChatEvent {
+  final String error;
+  
+  const _ChatConnectionError(this.error);
+  
+  @override
+  List<Object?> get props => [error];
 }
 
 // ========== BLoC ==========
@@ -387,7 +398,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       
       // 合并并去重（基于时间戳）
       final allMessages = {...history, ...gatewayHistory}.toList()
-        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        ..sort((a, b) => a.timestamp?.compareTo(b.timestamp ?? DateTime.now()) ?? 0);
       
       // 保存到缓存
       if (_storage != null && allMessages.isNotEmpty) {
