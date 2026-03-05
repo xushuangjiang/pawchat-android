@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../core/websocket/gateway_client.dart';
 import '../../../core/websocket/protocol.dart';
+import '../../../core/storage/local_storage.dart';
 
 // ========== States ==========
 

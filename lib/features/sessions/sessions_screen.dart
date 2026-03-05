@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/websocket/gateway_client.dart';
 import '../../core/websocket/protocol.dart';
 import '../chat/bloc/chat_bloc.dart';
+import '../../core/utils/extensions.dart';
 
 class SessionsScreen extends StatefulWidget {
   const SessionsScreen({super.key});

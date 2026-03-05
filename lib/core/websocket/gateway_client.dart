@@ -114,12 +114,11 @@ class GatewayClient {
     
     _channel!.sink.add(jsonEncode(payload));
     
-    // 等待响应
-    final response = await messages.firstWhere(
-      (msg) => msg.type == 'response' && 
-               msg.data?['method'] == 'chat.send',
-      timeout: const Duration(seconds: 30),
-    );
+    // 等待响应 (带超时)
+    final response = await messages
+        .where((msg) => msg.type == 'response' && msg.data?['method'] == 'chat.send')
+        .timeout(const Duration(seconds: 30))
+        .first;
     
     return ChatSendResponse.fromJson(response.data!);
   }
@@ -143,11 +142,10 @@ class GatewayClient {
     
     _channel!.sink.add(jsonEncode(payload));
     
-    final response = await messages.firstWhere(
-      (msg) => msg.type == 'response' && 
-               msg.data?['method'] == 'chat.history',
-      timeout: const Duration(seconds: 30),
-    );
+    final response = await messages
+        .where((msg) => msg.type == 'response' && msg.data?['method'] == 'chat.history')
+        .timeout(const Duration(seconds: 30))
+        .first;
     
     final history = response.data?['history'] as List?;
     if (history == null) return [];

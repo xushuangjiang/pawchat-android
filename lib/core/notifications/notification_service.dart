@@ -202,8 +202,11 @@ class NotificationService {
     return true;
   }
 
-  /// 销毁
+  /// 销毁 (可选)
+  /// 
+  /// 注意：FlutterLocalNotificationsPlugin 在较新版本中可能没有 dispose 方法
   void dispose() {
-    _notifications.dispose();
+    // 清理资源 (如需要)
+    debugPrint('[NotificationService] 销毁');
   }
 }
