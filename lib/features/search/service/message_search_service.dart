@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/storage/local_storage.dart';
 import '../../../features/chat/data/message.dart';
-import '../../../core/websocket/protocol.dart';
 
 /// 消息搜索服务
 /// 
@@ -38,14 +37,12 @@ class MessageSearchService {
       final chatMessages = await _storage.loadMessages(session) ?? [];
       
       for (final chatMessage in chatMessages) {
-        // 将 ChatMessage 转换为 Message
+        // 将 ChatMessage 转换为 Message (ChatMessage 没有 messageId 字段，使用 content 作为唯一标识)
         final message = Message(
-          id: chatMessage.messageId,
+          id: chatMessage.content, // 使用 content 作为临时 id
           role: chatMessage.role,
           content: chatMessage.content,
-          timestamp: chatMessage.timestamp is String
-              ? DateTime.tryParse(chatMessage.timestamp as String) ?? DateTime.now()
-              : chatMessage.timestamp as DateTime,
+          timestamp: chatMessage.timestamp,
         );
         
         final content = message.content.toLowerCase();
