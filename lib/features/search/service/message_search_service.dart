@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/storage/local_storage.dart';
 import '../../../features/chat/data/message.dart';
+import '../../../core/websocket/protocol.dart';
 
 /// 消息搜索服务
 /// 
@@ -31,12 +32,22 @@ class MessageSearchService {
     // 获取要搜索的会话列表
     final sessions = sessionKey != null
         ? [sessionKey]
-        : (await _storage.getAllSessions()) ?? [];
+        : await _storage.getAllSessions();
 
     for (final session in sessions) {
-      final messages = await _storage.loadMessages(session);
+      final chatMessages = await _storage.loadMessages(session) ?? [];
       
-      for (final message in messages) {
+      for (final chatMessage in chatMessages) {
+        // 将 ChatMessage 转换为 Message
+        final message = Message(
+          id: chatMessage.messageId,
+          role: chatMessage.role,
+          content: chatMessage.content,
+          timestamp: chatMessage.timestamp is String
+              ? DateTime.tryParse(chatMessage.timestamp as String) ?? DateTime.now()
+              : chatMessage.timestamp as DateTime,
+        );
+        
         final content = message.content.toLowerCase();
         if (content.contains(queryLower)) {
           // 找到匹配位置
