@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/websocket/protocol.dart';
+import '../../core/utils/extensions.dart';
 import '../chat/bloc/chat_bloc.dart';
 
 class SessionsScreen extends StatefulWidget {
@@ -141,7 +142,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
               backgroundColor: theme.colorScheme.primaryContainer,
               child: const Icon(Icons.chat, color: Colors.white),
             ),
-            title: Text(session.title ?? session.sessionKey),
+            title: Text(session.title.isNotEmpty ? session.title : session.sessionKey),
             subtitle: Text(
               '${session.messageCount} 条消息 · ${session.lastActive.toRelativeTime()}',
             ),

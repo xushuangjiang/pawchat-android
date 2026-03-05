@@ -196,7 +196,7 @@ class ToolCallEvent {
   final DateTime timestamp;
   final Duration? duration;
   
-  const ToolCallEvent({
+  ToolCallEvent({
     required this.toolName,
     this.input,
     this.output,

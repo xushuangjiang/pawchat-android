@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../core/di/service_locator.dart';
+import '../../../core/models/message.dart';
 import 'service/message_search_service.dart';
-import '../../core/storage/local_storage.dart';
+import '../../../core/storage/local_storage.dart';
 
 /// 消息搜索页面
 class SearchScreen extends StatefulWidget {
@@ -51,8 +51,10 @@ class _SearchScreenState extends State<SearchScreen> {
 
     try {
       // 初始化搜索服务
+      final storage = LocalStorage();
+      await storage.initialize();
       _searchService ??= MessageSearchService(
-        storage: await LocalStorage.create(),
+        storage: storage,
       );
 
       final results = await _searchService!.search(
@@ -193,7 +195,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildSearchResultTile(SearchResult result) {
-    final isUser = result.message.role == MessageRole.user;
+    final isUser = result.message.role.name == 'user';
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -258,7 +260,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  result.chatMessage.content,
+                  result.message.content,
                   style: const TextStyle(fontSize: 13),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,

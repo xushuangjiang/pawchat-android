@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'protocol.dart';
+import '../models/message.dart';
 
 /// OpenClaw Gateway WebSocket 客户端
 class GatewayClient {
