@@ -217,7 +217,7 @@ class ChatView extends StatelessWidget {
         ? (state as ChatConnected).messages 
         : (state is ChatStreaming) 
             ? (state as ChatStreaming).messages 
-            : [];
+            : <ChatMessage>[];
     
     return Column(
       children: [

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../chat/bloc/chat_bloc.dart';
-import '../../chat/presentation/message_bubble.dart';
-import '../service/message_search_service.dart';
-import '../../../core/storage/local_storage.dart';
+import '../chat/bloc/chat_bloc.dart';
+import '../chat/presentation/message_bubble.dart';
+import 'service/message_search_service.dart';
+import '../../core/storage/local_storage.dart';
 
 /// 消息搜索页面
 class SearchScreen extends StatefulWidget {
@@ -55,7 +55,7 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       // 初始化搜索服务
       _searchService ??= MessageSearchService(
-        storage: LocalStorage(),
+        storage: await LocalStorage.create(),
       );
 
       final results = await _searchService!.search(
