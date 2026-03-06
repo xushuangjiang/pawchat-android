@@ -18,8 +18,8 @@ class _ChatScreenState extends State<ChatScreen> {
   
   List<Message> _messages = [];
   GatewayConnectionState _connectionState = GatewayConnectionState.disconnected;
-  bool _isStreaming = false;
-  String _streamingContent = '';
+  Message? _streamingMessage;
+  bool _isSending = false;
   
   @override
   void initState() {
@@ -40,17 +40,14 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
   
-  Message? _currentStreamingMessage;
-  
   void _listenToMessages() {
     _client.messageStream.listen((message) {
       setState(() {
         if (message.isStreaming) {
-          _isStreaming = true;
-          _currentStreamingMessage = message;
+          _streamingMessage = message;
         } else {
-          _isStreaming = false;
-          _currentStreamingMessage = null;
+          _streamingMessage = null;
+          _isSending = false;
           _messages.add(message);
           _saveMessages();
         }
@@ -79,10 +76,16 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
     
+    if (!_client.isConnected) {
+      _showError('请先连接到 Gateway');
+      return;
+    }
+    
     // 添加用户消息
     final userMsg = Message.user(text);
     setState(() {
       _messages.add(userMsg);
+      _isSending = true;
       _textController.clear();
     });
     _saveMessages();
@@ -92,13 +95,18 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       _client.sendMessage(text);
     } catch (e) {
+      setState(() => _isSending = false);
       _showError('发送失败: $e');
     }
   }
   
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
   
@@ -119,14 +127,14 @@ class _ChatScreenState extends State<ChatScreen> {
           _buildConnectionIndicator(),
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: () => _openSettings(),
+            onPressed: _openSettings,
+            tooltip: '设置',
           ),
         ],
       ),
       body: Column(
         children: [
           Expanded(child: _buildMessageList()),
-          if (_isStreaming) _buildStreamingIndicator(),
           _buildInputArea(),
         ],
       ),
@@ -136,35 +144,74 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildConnectionIndicator() {
     Color color;
     IconData icon;
+    String tooltip;
     
     switch (_connectionState) {
       case GatewayConnectionState.connected:
         color = Colors.green;
         icon = Icons.circle;
+        tooltip = '已连接';
         break;
       case GatewayConnectionState.connecting:
         color = Colors.orange;
         icon = Icons.pending;
+        tooltip = '连接中...';
         break;
       case GatewayConnectionState.error:
         color = Colors.red;
-        icon = Icons.error;
+        icon = Icons.error_outline;
+        tooltip = '连接错误';
         break;
       default:
         color = Colors.grey;
         icon = Icons.circle_outlined;
+        tooltip = '未连接';
     }
     
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Icon(icon, color: color, size: 12),
+    return Tooltip(
+      message: tooltip,
+      child: Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: Icon(icon, color: color, size: 12),
+      ),
     );
   }
   
   Widget _buildMessageList() {
     final items = [..._messages];
-    if (_isStreaming && _currentStreamingMessage != null) {
-      items.add(_currentStreamingMessage!);
+    if (_streamingMessage != null) {
+      items.add(_streamingMessage!);
+    }
+    
+    if (items.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.chat_bubble_outline,
+              size: 64,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '开始新的对话',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '点击右上角设置连接 Gateway',
+              style: TextStyle(
+                color: Colors.grey.shade500,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
     }
     
     return ListView.builder(
@@ -177,6 +224,27 @@ class _ChatScreenState extends State<ChatScreen> {
   
   Widget _buildMessageBubble(Message msg) {
     final isUser = msg.role == MessageRole.user;
+    final isSystem = msg.role == MessageRole.system;
+    
+    if (isSystem) {
+      return Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            msg.content,
+            style: TextStyle(
+              color: Colors.grey.shade700,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      );
+    }
     
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -187,46 +255,45 @@ class _ChatScreenState extends State<ChatScreen> {
           color: isUser 
             ? Theme.of(context).colorScheme.primary 
             : Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
         ),
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
-        child: Text(
-          msg.content,
-          style: TextStyle(
-            color: isUser ? Colors.white : null,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              msg.content,
+              style: TextStyle(
+                color: isUser ? Colors.white : null,
+              ),
+            ),
+            if (msg.isStreaming)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      isUser ? Colors.white70 : Colors.grey,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
-      ),
-    );
-  }
-  
-  Widget _buildStreamingIndicator() {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          const SizedBox(width: 8),
-          Text('思考中...', style: TextStyle(color: Colors.grey)),
-          Spacer(),
-          TextButton(
-            onPressed: () => _client.abort(),
-            child: Text('中止'),
-          ),
-        ],
       ),
     );
   }
   
   Widget _buildInputArea() {
+    final isConnected = _client.isConnected;
+    
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border(top: BorderSide(color: Colors.grey.shade300)),
@@ -237,8 +304,11 @@ class _ChatScreenState extends State<ChatScreen> {
             Expanded(
               child: TextField(
                 controller: _textController,
+                enabled: isConnected && !_isSending,
                 decoration: InputDecoration(
-                  hintText: '输入消息...',
+                  hintText: isConnected 
+                      ? (_isSending ? '发送中...' : '输入消息...')
+                      : '请先连接 Gateway',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
@@ -246,18 +316,24 @@ class _ChatScreenState extends State<ChatScreen> {
                   filled: true,
                   fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                   contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+                    horizontal: 20,
+                    vertical: 14,
                   ),
                 ),
                 onSubmitted: (_) => _sendMessage(),
               ),
             ),
             const SizedBox(width: 8),
-            IconButton(
-              onPressed: _sendMessage,
-              icon: const Icon(Icons.send),
-              color: Theme.of(context).colorScheme.primary,
+            FloatingActionButton.small(
+              onPressed: isConnected && !_isSending ? _sendMessage : null,
+              elevation: 0,
+              child: _isSending
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send),
             ),
           ],
         ),

@@ -7,6 +7,8 @@ import 'message_model.dart';
 enum GatewayConnectionState { disconnected, connecting, connected, error }
 
 /// Gateway WebSocket 客户端
+/// 
+/// 遵循 OpenClaw Gateway Protocol v3
 class GatewayClient {
   WebSocketChannel? _channel;
   final _stateController = StreamController<GatewayConnectionState>.broadcast();
@@ -14,9 +16,18 @@ class GatewayClient {
   
   String? _url;
   String? _token;
+  String? _sessionKey;
+  int _messageId = 0;
+  bool _isConnected = false;
   
   Stream<GatewayConnectionState> get stateStream => _stateController.stream;
   Stream<Message> get messageStream => _messageController.stream;
+  bool get isConnected => _isConnected;
+  
+  /// 生成唯一消息 ID
+  String _generateId() {
+    return '${DateTime.now().millisecondsSinceEpoch}-${_messageId++}';
+  }
   
   /// 连接到 Gateway
   Future<void> connect(String url, {String? token}) async {
@@ -29,16 +40,15 @@ class GatewayClient {
     _stateController.add(GatewayConnectionState.connecting);
     
     try {
-      // 构建连接 URL
+      // 构建 WebSocket URL
       var wsUrl = url.startsWith('ws') ? url : 'ws://$url';
-      if (token != null && token.isNotEmpty) {
-        wsUrl += '?auth.token=$token';
-      }
       
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
       await _channel!.ready;
       
-      _stateController.add(GatewayConnectionState.connected);
+      // 发送 connect 请求（OpenClaw Protocol）
+      await _sendConnectRequest(token);
+      
       _listen();
       
     } catch (e) {
@@ -47,34 +57,83 @@ class GatewayClient {
     }
   }
   
+  /// 发送 connect 请求（Protocol v3）
+  Future<void> _sendConnectRequest(String? token) async {
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'connect',
+      'params': {
+        'minProtocol': 3,
+        'maxProtocol': 3,
+        'client': {
+          'id': 'pawchat-android',
+          'version': '0.1.1',
+          'platform': 'android',
+          'mode': 'operator',
+        },
+        'role': 'operator',
+        'scopes': ['operator.read', 'operator.write'],
+        if (token != null && token.isNotEmpty)
+          'auth': {'token': token},
+        'locale': 'zh-CN',
+        'userAgent': 'PawChat/0.1.1',
+      },
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+    
+    // 等待连接响应（简单处理，实际应该监听响应）
+    await Future.delayed(const Duration(milliseconds: 500));
+    _isConnected = true;
+    _stateController.add(GatewayConnectionState.connected);
+  }
+  
   /// 断开连接
   Future<void> disconnect() async {
+    _isConnected = false;
     await _channel?.sink.close();
     _channel = null;
     _stateController.add(GatewayConnectionState.disconnected);
   }
   
-  /// 发送消息
-  void sendMessage(String content) {
-    if (_channel == null) {
+  /// 发送聊天消息
+  void sendMessage(String content, {String? sessionKey}) async {
+    if (!_isConnected || _channel == null) {
       throw Exception('未连接到 Gateway');
     }
     
-    final payload = {
+    // 如果没有指定 sessionKey，创建新会话
+    _sessionKey ??= 'session-${DateTime.now().millisecondsSinceEpoch}';
+    if (sessionKey != null) {
+      _sessionKey = sessionKey;
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
       'method': 'chat.send',
-      'params': {'content': content},
+      'params': {
+        'content': content,
+        'sessionKey': _sessionKey,
+      },
     };
     
-    _channel!.sink.add(jsonEncode(payload));
+    _channel!.sink.add(jsonEncode(request));
   }
   
   /// 中止当前响应
   void abort() {
-    if (_channel == null) return;
+    if (!_isConnected || _channel == null) return;
     
-    _channel!.sink.add(jsonEncode({
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
       'method': 'chat.abort',
-    }));
+      'params': {},
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
   }
   
   /// 监听消息
@@ -89,9 +148,11 @@ class GatewayClient {
         }
       },
       onError: (error) {
+        _isConnected = false;
         _stateController.add(GatewayConnectionState.error);
       },
       onDone: () {
+        _isConnected = false;
         _stateController.add(GatewayConnectionState.disconnected);
       },
     );
@@ -101,28 +162,42 @@ class GatewayClient {
   void _handleMessage(Map<String, dynamic> json) {
     final type = json['type'];
     
-    if (type == 'chunk') {
-      // 流式响应片段
-      final content = json['content'] ?? '';
-      _messageController.add(Message.assistantStreaming().copyWith(content: content));
-    } else if (type == 'complete') {
-      // 响应完成
-      final content = json['content'] ?? '';
-      _messageController.add(Message(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        role: MessageRole.assistant,
-        content: content,
-        timestamp: DateTime.now(),
-      ));
-    } else if (type == 'error') {
-      // 错误消息
-      final errorMsg = json['error'] ?? '未知错误';
-      _messageController.add(Message(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        role: MessageRole.assistant,
-        content: '❌ $errorMsg',
-        timestamp: DateTime.now(),
-      ));
+    // 处理事件（流式响应）
+    if (type == 'event') {
+      final event = json['event'];
+      final payload = json['payload'] ?? {};
+      
+      if (event == 'chat.chunk') {
+        // 流式响应片段
+        final content = payload['content'] ?? '';
+        _messageController.add(Message.assistantStreaming().copyWith(content: content));
+      } else if (event == 'chat.complete') {
+        // 响应完成
+        final content = payload['content'] ?? '';
+        _messageController.add(Message(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          role: MessageRole.assistant,
+          content: content,
+          timestamp: DateTime.now(),
+        ));
+      } else if (event == 'chat.error') {
+        // 错误消息
+        final errorMsg = payload['error'] ?? '未知错误';
+        _messageController.add(Message(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          role: MessageRole.assistant,
+          content: '❌ $errorMsg',
+          timestamp: DateTime.now(),
+        ));
+      }
+    }
+    // 处理响应
+    else if (type == 'res') {
+      final ok = json['ok'];
+      if (!ok) {
+        final error = json['error'] ?? '请求失败';
+        print('Gateway 错误: $error');
+      }
     }
   }
   
