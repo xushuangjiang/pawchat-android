@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import '../../core/gateway_client.dart';
 import '../../core/message_model.dart';
 import '../../core/message_store.dart';
+import '../../core/message_actions.dart';
+import '../../core/reconnection_manager.dart';
+import '../../core/session_manager.dart';
 import '../settings/settings_screen.dart';
+import '../sessions/sessions_screen.dart';
+import '../search/search_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -15,21 +20,32 @@ class _ChatScreenState extends State<ChatScreen> {
   final _client = GatewayClient();
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
+  late final ReconnectionManager _reconnectionManager;
+  late final SessionManager _sessionManager;
   
   List<Message> _messages = [];
   GatewayConnectionState _connectionState = GatewayConnectionState.disconnected;
+  ReconnectionState _reconnectionState = ReconnectionState.connected;
   Message? _streamingMessage;
   bool _isSending = false;
   
   @override
   void initState() {
     super.initState();
-    _loadMessages();
+    _reconnectionManager = ReconnectionManager(_client);
+    _sessionManager = SessionManager();
+    _initialize();
+  }
+  
+  Future<void> _initialize() async {
+    await _sessionManager.loadSessions();
+    await _loadMessages();
     _listenToConnection();
+    _listenToReconnection();
     _listenToMessages();
   }
   
-  void _loadMessages() async {
+  Future<void> _loadMessages() async {
     final messages = await MessageStore.loadMessages();
     setState(() => _messages = messages);
   }
@@ -37,6 +53,41 @@ class _ChatScreenState extends State<ChatScreen> {
   void _listenToConnection() {
     _client.stateStream.listen((state) {
       setState(() => _connectionState = state);
+      
+      switch (state) {
+        case GatewayConnectionState.connected:
+          MessageActions.showConnectedSnackBar(context);
+          break;
+        case GatewayConnectionState.disconnected:
+          if (_reconnectionManager.isEnabled) {
+            MessageActions.showDisconnectedSnackBar(context);
+          }
+          break;
+        default:
+          break;
+      }
+    });
+  }
+  
+  void _listenToReconnection() {
+    _reconnectionManager.stateStream.listen((state) {
+      setState(() => _reconnectionState = state);
+      
+      switch (state) {
+        case ReconnectionState.reconnecting:
+          MessageActions.showReconnectionSnackBar(
+            context,
+            attempt: _reconnectionManager.attemptCount,
+            maxAttempts: 10,
+            onCancel: () => _reconnectionManager.disable(),
+          );
+          break;
+        case ReconnectionState.maxAttemptsReached:
+          _showError('重连失败，请检查网络或 Gateway 状态');
+          break;
+        default:
+          break;
+      }
     });
   }
   
@@ -93,7 +144,11 @@ class _ChatScreenState extends State<ChatScreen> {
     
     // 发送到 Gateway
     try {
-      _client.sendMessage(text);
+      final sessionKey = _sessionManager.currentSession?.key;
+      _client.sendMessage(text, sessionKey: sessionKey);
+      if (sessionKey != null) {
+        _sessionManager.updateSessionTime(sessionKey);
+      }
     } catch (e) {
       setState(() => _isSending = false);
       _showError('发送失败: $e');
@@ -113,6 +168,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _client.dispose();
+    _reconnectionManager.dispose();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -126,6 +182,16 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           _buildConnectionIndicator(),
           IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: _openSearch,
+            tooltip: '搜索',
+          ),
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline),
+            onPressed: _openSessions,
+            tooltip: '会话',
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             onPressed: _openSettings,
             tooltip: '设置',
@@ -134,6 +200,7 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
+          _buildReconnectionBanner(),
           Expanded(child: _buildMessageList()),
           _buildInputArea(),
         ],
@@ -173,6 +240,44 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Padding(
         padding: const EdgeInsets.only(right: 8),
         child: Icon(icon, color: color, size: 12),
+      ),
+    );
+  }
+  
+  Widget _buildReconnectionBanner() {
+    if (_reconnectionState != ReconnectionState.reconnecting) {
+      return const SizedBox.shrink();
+    }
+    
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      color: Colors.orange.shade100,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation(Colors.orange.shade800),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '正在重连... (${_reconnectionManager.attemptCount}/10)',
+              style: TextStyle(color: Colors.orange.shade800),
+            ),
+          ),
+          TextButton(
+            onPressed: () => _reconnectionManager.disable(),
+            child: Text(
+              '取消',
+              style: TextStyle(color: Colors.orange.shade800),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -246,47 +351,61 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
     
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isUser 
-            ? Theme.of(context).colorScheme.primary 
-            : Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              msg.content,
-              style: TextStyle(
-                color: isUser ? Colors.white : null,
+    return GestureDetector(
+      onLongPress: () => MessageActions.showMessageMenu(
+        context,
+        msg,
+        onDelete: () => _deleteMessage(msg),
+      ),
+      child: Align(
+        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isUser 
+              ? Theme.of(context).colorScheme.primary 
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.75,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                msg.content,
+                style: TextStyle(
+                  color: isUser ? Colors.white : null,
+                ),
               ),
-            ),
-            if (msg.isStreaming)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      isUser ? Colors.white70 : Colors.grey,
+              if (msg.isStreaming)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isUser ? Colors.white70 : Colors.grey,
+                      ),
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+  
+  void _deleteMessage(Message msg) {
+    setState(() {
+      _messages.removeWhere((m) => m.id == msg.id);
+    });
+    _saveMessages();
   }
   
   Widget _buildInputArea() {
@@ -341,10 +460,36 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
   
+  void _openSearch() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SearchScreen()),
+    );
+  }
+  
+  void _openSessions() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SessionsScreen(sessionManager: _sessionManager),
+      ),
+    );
+    if (result == true) {
+      // 会话已切换，可以重新加载消息
+      _loadMessages();
+    }
+  }
+  
   void _openSettings() async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => SettingsScreen(client: _client)),
+      MaterialPageRoute(
+        builder: (_) => SettingsScreen(
+          client: _client,
+          reconnectionManager: _reconnectionManager,
+          sessionManager: _sessionManager,
+        ),
+      ),
     );
     if (result == true) {
       _loadMessages();

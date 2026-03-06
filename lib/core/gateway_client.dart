@@ -157,6 +157,60 @@ class GatewayClient {
     _channel!.sink.add(jsonEncode(request));
   }
   
+  /// 获取会话列表
+  void getSessions({int limit = 50}) {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'sessions.list',
+      'params': {
+        'limit': limit,
+      },
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
+  /// 重置会话
+  void resetSession(String sessionKey) {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'sessions.reset',
+      'params': {
+        'key': sessionKey,
+      },
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
+  /// 删除会话
+  void deleteSession(String sessionKey) {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'sessions.delete',
+      'params': {
+        'key': sessionKey,
+      },
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
   /// 发送聊天消息
   void sendMessage(String content, {String? sessionKey}) {
     if (!_isConnected || _channel == null) {
@@ -275,6 +329,13 @@ class GatewayClient {
             timestamp: DateTime.tryParse(msg['timestamp'] ?? '') ?? DateTime.now(),
           ));
         }
+      } else if (event == 'presence') {
+        // 设备在线状态更新
+        final entries = payload['entries'] as List? ?? [];
+        _messageController.add(Message.system('在线设备: ${entries.length}'));
+      } else if (event == 'heartbeat') {
+        // 心跳响应
+        print('收到心跳响应');
       }
       return;
     }

@@ -85,7 +85,7 @@ class GatewayTester:
                     "id": "cli",
                     "version": "0.2.1",
                     "platform": "android",
-                    "mode": "operator"
+                    "mode": "cli"
                 },
                 "role": "operator",
                 "scopes": ["operator.read", "operator.write"],
@@ -98,11 +98,12 @@ class GatewayTester:
             }
         }
         
-        if self.challenge_nonce:
-            request["params"]["device"] = {
-                "id": "test-device",
-                "nonce": self.challenge_nonce
-            }
+        # 注意：device 字段需要签名验证，暂不发送
+        # if self.challenge_nonce:
+        #     request["params"]["device"] = {
+        #         "id": "test-device",
+        #         "nonce": self.challenge_nonce
+        #     }
         
         print(f"→ 发送: {json.dumps(request, indent=2, ensure_ascii=False)}")
         self.ws.send(json.dumps(request))
