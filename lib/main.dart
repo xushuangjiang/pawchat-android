@@ -6,8 +6,17 @@ import 'features/chat/presentation/chat_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 初始化依赖注入
-  await setupDependencies();
+  // 启用 Flutter 调试日志
+  debugPrint('🚀 PawChat 启动中...');
+  
+  try {
+    // 初始化依赖注入
+    await setupDependencies();
+    debugPrint('✅ 依赖注入初始化完成');
+  } catch (e, stackTrace) {
+    debugPrint('❌ 依赖注入初始化失败: $e');
+    debugPrint(stackTrace.toString());
+  }
   
   // 设置系统状态栏
   SystemChrome.setSystemUIOverlayStyle(
