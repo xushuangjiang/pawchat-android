@@ -20,7 +20,9 @@ jobs:
           channel: 'stable'
 
       - name: Get dependencies
-        run: flutter pub get
+        run: |
+          flutter pub upgrade
+          flutter pub get
 
       # 暂时跳过代码分析，因为有 warnings 会导致构建失败
       # - name: Analyze code
