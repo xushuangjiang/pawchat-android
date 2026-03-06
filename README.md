@@ -1,314 +1,90 @@
-# PawChat Android - OpenClaw 移动端应用
+# PawChat
 
-🐾 基于 OpenClaw Gateway WebSocket 的 Android 聊天客户端
+基于 OpenClaw Gateway WebSocket 的 Android 聊天客户端
 
-## 技术选型
+## 📱 简介
 
-### 前端框架
-- **Flutter 3.x** - 跨平台 UI 框架 (优先推荐)
-  - 单一代码库支持 Android/iOS
-  - 原生性能，热重载开发体验
-  - 丰富的 Material 3 组件库
-  
-### 替代方案
-- **React Native + Expo** - JavaScript/TypeScript 生态
-- **Kotlin + Jetpack Compose** - 纯原生 Android
+PawChat 是一个简洁的 Android 聊天应用，让你可以通过手机与 OpenClaw Agent 进行实时对话。
 
-### 核心依赖
-- WebSocket 连接：`web_socket_channel` (Flutter) / `okhttp` (Kotlin)
-- 状态管理：`flutter_bloc` / `Riverpod`
-- 本地存储：`hive` / `shared_preferences`
-- JSON 序列化：`json_serializable`
+## ✨ 功能特性
 
-## OpenClaw Gateway 协议
+- 🔌 **WebSocket 连接** - 实时连接 OpenClaw Gateway
+- 💬 **消息收发** - 支持流式响应，实时显示 AI 回复
+- 💾 **本地缓存** - 消息本地存储，重启后保留
+- 🎨 **深色主题** - 自动适配系统主题
+- ⚙️ **灵活配置** - 自定义 Gateway URL 和 Token
 
-### 连接信息
-- **默认端口**: `18789`
-- **WebSocket URL**: `ws://<host>:18789/` 或 `wss://<host>:18789/`
-- **认证方式**: Token 或 Password
+## 📥 安装
 
-### 核心 API
+从 [Releases](https://github.com/xushuangjiang/pawchat-android/releases) 页面下载最新 APK：
 
-| 方法 | 描述 |
-|------|------|
-| `chat.history` | 获取会话历史消息 |
-| `chat.send` | 发送消息 (非阻塞，返回 runId) |
-| `chat.abort` | 中止当前运行 |
-| `chat.inject` | 注入助手笔记 (仅 UI 显示) |
+- `app-arm64-v8a-release.apk` - 适用于大多数现代 Android 手机
+- `app-x86_64-release.apk` - 适用于 x86_64 模拟器
 
-### 设备配对
+## 🚀 使用方法
 
-首次连接新设备时需要配对批准：
+1. **安装应用**
+   ```bash
+   adb install app-arm64-v8a-release.apk
+   ```
 
-```bash
-# 查看待批准的设备
-openclaw devices list
+2. **配置 Gateway**
+   - 打开应用，点击右上角设置图标
+   - 输入 Gateway URL（例如：`192.168.1.100:18789`）
+   - 如有需要，输入 Token
+   - 点击"连接"
 
-# 批准设备
-openclaw devices approve <requestId>
-```
+3. **开始聊天**
+   - 返回主界面
+   - 在底部输入框输入消息
+   - 点击发送按钮
 
-本地连接 (`127.0.0.1`) 自动批准。
+## 🏗️ 技术栈
 
-## 项目结构
+- **Flutter** 3.24.0
+- **Dart** 3.0+
+- **WebSocket** - 实时通信
+- **SharedPreferences** - 本地数据持久化
 
-```
-pawchat-android/
-├── lib/
-│   ├── main.dart
-│   ├── app/
-│   │   ├── app.dart              # 应用配置
-│   │   └── routes.dart           # 路由配置
-│   ├── core/
-│   │   ├── websocket/
-│   │   │   ├── gateway_client.dart   # WebSocket 客户端
-│   │   │   ├── protocol.dart         # 协议定义
-│   │   │   └── auth.dart             # 认证处理
-│   │   ├── storage/
-│   │   │   └── local_storage.dart    # 本地存储
-│   │   └── utils/
-│   │       └── extensions.dart
-│   ├── features/
-│   │   ├── chat/
-│   │   │   ├── presentation/
-│   │   │   │   ├── chat_screen.dart
-│   │   │   │   ├── message_list.dart
-│   │   │   │   └── message_input.dart
-│   │   │   ├── bloc/
-│   │   │   │   └── chat_bloc.dart
-│   │   │   └── models/
-│   │   │       └── message.dart
-│   │   ├── settings/
-│   │   │   ├── settings_screen.dart
-│   │   │   └── gateway_config.dart
-│   │   └── pairing/
-│   │       └── pairing_screen.dart
-│   └── widgets/
-│       ├── message_bubble.dart
-│       └── loading_indicator.dart
-├── assets/
-│   └── images/
-├── test/
-├── pubspec.yaml
-└── README.md
-```
-
-## 快速开始
-
-### 1. 环境准备
+## 🛠️ 开发构建
 
 ```bash
-# 安装 Flutter
-flutter doctor
+# 克隆仓库
+git clone https://github.com/xushuangjiang/pawchat-android.git
+cd pawchat-android
 
-# 创建项目
-flutter create pawchat_android
-cd pawchat_android
+# 获取依赖
+flutter pub get
 
-# 添加依赖
-flutter pub add web_socket_channel flutter_bloc hive hive_flutter json_annotation
-flutter pub add --dev build_runner json_serializable hive_generator
+# 运行调试版本
+flutter run
+
+# 构建发布版本
+flutter build apk --release
 ```
 
-### 2. Gateway 配置
+## 📋 项目状态
 
-确保 OpenClaw Gateway 已启动并配置认证：
+当前版本：**v0.1.0 (Alpha)**
 
-```bash
-# 启动 Gateway
-openclaw gateway
+### ✅ 已实现
+- [x] WebSocket 连接与认证
+- [x] 消息收发（流式响应）
+- [x] 本地消息缓存
+- [x] 深色主题支持
+- [x] Gateway 配置
 
-# 查看/生成 Token
-openclaw gateway --token "$(openssl rand -hex 32)"
-```
-
-### 3. 连接配置
-
-在应用中配置 Gateway 连接：
-
-```dart
-// settings/gateway_config.dart
-class GatewayConfig {
-  final String host;
-  final int port;
-  final String? token;
-  final bool useSecure; // wss vs ws
-  
-  GatewayConfig({
-    this.host = '192.168.1.100',
-    this.port = 18789,
-    this.token,
-    this.useSecure = false,
-  });
-  
-  String get wsUrl => '${useSecure ? 'wss' : 'ws'}://$host:$port';
-}
-```
-
-## WebSocket 协议示例
-
-### 连接建立
-
-```dart
-import 'package:web_socket_channel/web_socket_channel.dart';
-
-class GatewayClient {
-  late WebSocketChannel _channel;
-  
-  Future<void> connect(String url, String? token) async {
-    final uri = Uri.parse(url);
-    final authUri = token != null 
-        ? uri.replace(queryParameters: {'auth.token': token})
-        : uri;
-    
-    _channel = WebSocketChannel.connect(authUri);
-    
-    // 监听消息
-    _channel.stream.listen(
-      (message) => _handleMessage(message),
-      onError: (error) => _handleError(error),
-      onDone: () => _handleDisconnect(),
-    );
-  }
-  
-  void _handleMessage(dynamic message) {
-    // 解析 Gateway 响应
-    final data = jsonDecode(message as String);
-    // 处理不同类型的消息...
-  }
-}
-```
-
-### 发送消息
-
-```dart
-Future<Map<String, dynamic>> sendMessage({
-  required String sessionKey,
-  required String content,
-  String? idempotencyKey,
-}) async {
-  final payload = {
-    'method': 'chat.send',
-    'params': {
-      'sessionKey': sessionKey,
-      'content': content,
-      if (idempotencyKey != null) 'idempotencyKey': idempotencyKey,
-    },
-  };
-  
-  _channel.sink.add(jsonEncode(payload));
-  
-  // 等待响应 (包含 runId)
-  // ...
-}
-```
-
-### 接收流式响应
-
-```dart
-// Gateway 通过 chat 事件流式返回响应
-// 事件格式示例:
-{
-  "type": "chat",
-  "sessionKey": "default",
-  "runId": "xxx",
-  "content": "部分响应内容...",
-  "status": "streaming" | "completed" | "aborted"
-}
-```
-
-## 安全考虑
-
-### 认证
-- 使用 Token 认证而非 Password（Token 可撤销）
-- Token 存储在安全存储中 (Android Keystore)
-- 支持 Tailscale 身份认证（如使用 Tailscale Serve）
-
-### 网络
-- 优先使用 `wss://` (TLS 加密)
-- 本地开发可用 `ws://`
-- 通过 Tailscale Serve 获得 HTTPS
-
-### 设备配对
-- 首次连接需要用户批准
-- 配对请求 1 小时后过期
-- 可随时撤销已配对设备
-
-## 功能清单
-
-### MVP (最小可行产品)
-- [ ] Gateway 连接配置
-- [ ] WebSocket 认证
-- [ ] 设备配对流程
-- [ ] 发送/接收消息
-- [ ] 消息历史加载
-- [ ] 流式响应显示
-- [ ] 中止运行
-
-### 后续迭代
+### 🚧 待实现
 - [ ] 多会话管理
-- [ ] 消息搜索
-- [ ] 离线缓存
+- [ ] 附件上传（图片、文件）
 - [ ] 推送通知
-- [ ] 语音输入
-- [ ] 附件支持
-- [ ] 主题定制
+- [ ] 网络自动重连
+- [ ] 消息搜索
 
-## 开发参考
+## 🤝 贡献
 
-- OpenClaw 文档：https://docs.openclaw.ai
-- Control UI 源码：`~/.npm-global/lib/node_modules/openclaw/dist/control-ui`
-- WebSocket 协议参考：`docs/web/control-ui.md`
+欢迎提交 Issue 和 PR！
 
-## 状态追踪
+## 📄 许可证
 
-- 创建日期：2026-03-05
-- 状态：核心功能开发完成 (v1.0)，v1.1 功能已实现待集成
-- 完成度：约 65% (68/104 功能)
-
-### 已完成 (v1.0)
-- ✅ WebSocket 客户端 (`gateway_client.dart`)
-- ✅ 协议定义 (`protocol.dart`)
-- ✅ BLoC 状态管理 (`chat_bloc.dart`)
-- ✅ 聊天界面 (`chat_screen.dart`)
-- ✅ 消息列表 + 下拉刷新 (`message_list.dart`)
-- ✅ 消息气泡 (`message_bubble.dart`)
-- ✅ 输入框 (`message_input.dart`)
-- ✅ 设置页面 (`settings_screen.dart`)
-- ✅ 本地存储 (`local_storage.dart`)
-- ✅ 工具调用显示 (`tool_call_display.dart`)
-- ✅ 会话管理 (`sessions_screen.dart`)
-- ✅ 路由系统 (`routes.dart`)
-- ✅ 工具扩展 (`extensions.dart`)
-- ✅ 消息缓存
-- ✅ 深色主题
-
-### v1.1 - 已实现待集成 ⚠️
-以下功能模块已实现，但需要在主流程中集成和测试：
-
-| 功能 | 状态 | 文件 | 说明 |
-|------|------|------|------|
-| **自动重连** | ⚠️ 已实现待集成 | `reconnect_manager.dart` | 指数退避策略、最大重试次数、状态回调已就绪，需接入 GatewayClient |
-| **消息搜索** | ⚠️ 已实现待集成 | `search_screen.dart`, `message_search_service.dart` | 本地缓存搜索、高亮匹配、结果展示已就绪，需添加导航入口 |
-| **附件选择** | ⚠️ 已实现待集成 | `attachment_picker.dart`, `attachment_service.dart` | 图片选择、拍照、预览已就绪，实际上传 API 待 Gateway 支持 |
-| **推送通知** | ⚠️ 已实现待集成 | `notification_service.dart`, `message_notification_listener.dart` | 本地通知、权限管理已就绪，需与应用生命周期联动 |
-
-#### v1.1 集成任务清单
-- [ ] 将 ReconnectManager 集成到 GatewayClient，处理断线自动重连
-- [ ] 在 ChatScreen 中添加重连指示器 UI (`reconnect_indicator.dart`)
-- [ ] 添加搜索页面入口（AppBar 搜索按钮或手势）
-- [ ] 将 AttachmentPicker 集成到 MessageInput，支持发送图片
-- [ ] 初始化 NotificationService，请求权限，绑定消息监听
-- [ ] 处理应用前后台状态，控制通知显示逻辑
-
-### v1.2 计划
-- [ ] 网络状态监听（WiFi/移动数据切换检测）
-- [ ] 消息导出/备份功能
-- [ ] 会话归档/删除
-- [ ] 性能优化（大图加载、长列表优化）
-
-### v2.0 愿景
-- [ ] 语音输入
-- [ ] 端到端加密
-- [ ] 多账号支持
-- [ ] iOS 版本
+MIT License
