@@ -40,15 +40,17 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
   
+  Message? _currentStreamingMessage;
+  
   void _listenToMessages() {
     _client.messageStream.listen((message) {
       setState(() {
         if (message.isStreaming) {
           _isStreaming = true;
-          _streamingContent = message.content;
+          _currentStreamingMessage = message;
         } else {
           _isStreaming = false;
-          _streamingContent = '';
+          _currentStreamingMessage = null;
           _messages.add(message);
           _saveMessages();
         }
@@ -160,19 +162,16 @@ class _ChatScreenState extends State<ChatScreen> {
   }
   
   Widget _buildMessageList() {
+    final items = [..._messages];
+    if (_isStreaming && _currentStreamingMessage != null) {
+      items.add(_currentStreamingMessage!);
+    }
+    
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.all(16),
-      itemCount: _messages.length + (_isStreaming ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index < _messages.length) {
-          return _buildMessageBubble(_messages[index]);
-        } else {
-          return _buildMessageBubble(
-            Message.assistantStreaming().copyWith(content: _streamingContent),
-          );
-        }
-      },
+      itemCount: items.length,
+      itemBuilder: (context, index) => _buildMessageBubble(items[index]),
     );
   }
   
