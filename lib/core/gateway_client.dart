@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'message_model.dart';
 
@@ -17,9 +18,11 @@ class GatewayClient {
   String? _url;
   String? _token;
   String? _sessionKey;
+  String? _deviceId;
   int _messageId = 0;
   bool _isConnected = false;
   Completer<void>? _connectCompleter;
+  String? _challengeNonce;
   
   Stream<GatewayConnectionState> get stateStream => _stateController.stream;
   Stream<Message> get messageStream => _messageController.stream;
@@ -28,6 +31,12 @@ class GatewayClient {
   /// 生成唯一消息 ID
   String _generateId() {
     return '${DateTime.now().millisecondsSinceEpoch}-${_messageId++}';
+  }
+  
+  /// 生成设备 ID
+  String _getDeviceId() {
+    _deviceId ??= 'pawchat-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(10000)}';
+    return _deviceId!;
   }
   
   /// 连接到 Gateway
@@ -50,8 +59,8 @@ class GatewayClient {
       // 开始监听（必须在发送 connect 之前）
       _listen();
       
-      // 发送 connect 请求并等待响应
-      await _sendConnectRequest(token);
+      // 等待 challenge 或发送 connect 请求
+      await _waitForChallengeOrConnect(token);
       
     } catch (e) {
       _stateController.add(GatewayConnectionState.error);
@@ -59,36 +68,18 @@ class GatewayClient {
     }
   }
   
-  /// 发送 connect 请求（Protocol v3）
-  Future<void> _sendConnectRequest(String? token) async {
-    final connectId = _generateId();
-    
-    final request = {
-      'type': 'req',
-      'id': connectId,
-      'method': 'connect',
-      'params': {
-        'minProtocol': 3,
-        'maxProtocol': 3,
-        'client': {
-          'id': 'pawchat-android',
-          'version': '0.1.1',
-          'platform': 'android',
-          'mode': 'operator',
-        },
-        'role': 'operator',
-        'scopes': ['operator.read', 'operator.write'],
-        if (token != null && token.isNotEmpty)
-          'auth': {'token': token},
-        'locale': 'zh-CN',
-        'userAgent': 'PawChat/0.1.1',
-      },
-    };
-    
+  /// 等待 challenge 或直接发送 connect
+  Future<void> _waitForChallengeOrConnect(String? token) async {
     // 创建 completer 等待响应
     _connectCompleter = Completer<void>();
     
-    _channel!.sink.add(jsonEncode(request));
+    // 给服务器一点时间发送 challenge
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    // 如果没有收到 challenge，直接发送 connect
+    if (_challengeNonce == null) {
+      await _sendConnectRequest(token);
+    }
     
     // 等待响应，超时 10 秒
     await _connectCompleter!.future.timeout(
@@ -99,10 +90,53 @@ class GatewayClient {
     );
   }
   
+  /// 发送 connect 请求（Protocol v3）
+  Future<void> _sendConnectRequest(String? token) async {
+    final deviceId = _getDeviceId();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'connect',
+      'params': {
+        'minProtocol': 3,
+        'maxProtocol': 3,
+        'client': {
+          'id': 'cli',  // 必须使用标准 client id
+          'version': '0.1.2',
+          'platform': 'android',
+          'mode': 'operator',
+        },
+        'role': 'operator',
+        'scopes': ['operator.read', 'operator.write'],
+        'caps': [],
+        'commands': [],
+        'permissions': {},
+        if (token != null && token.isNotEmpty)
+          'auth': {'token': token},
+        'locale': 'zh-CN',
+        'userAgent': 'PawChat/0.1.2',
+        'device': {
+          'id': deviceId,
+          'publicKey': '',  // 简化处理，不实现签名
+          'signature': '',
+          'signedAt': now,
+          if (_challengeNonce != null) 'nonce': _challengeNonce,
+        },
+      },
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
   /// 断开连接
   Future<void> disconnect() async {
     _isConnected = false;
-    _connectCompleter?.completeError('Disconnected');
+    _challengeNonce = null;
+    if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
+      _connectCompleter!.completeError('Disconnected');
+    }
     _connectCompleter = null;
     await _channel?.sink.close();
     _channel = null;
@@ -162,13 +196,15 @@ class GatewayClient {
       onError: (error) {
         _isConnected = false;
         _stateController.add(GatewayConnectionState.error);
-        _connectCompleter?.completeError(error);
+        if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
+          _connectCompleter!.completeError(error);
+        }
       },
       onDone: () {
         _isConnected = false;
         _stateController.add(GatewayConnectionState.disconnected);
-        if (!_connectCompleter!.isCompleted) {
-          _connectCompleter?.completeError('Connection closed');
+        if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
+          _connectCompleter!.completeError('Connection closed');
         }
       },
     );
@@ -178,33 +214,18 @@ class GatewayClient {
   void _handleMessage(Map<String, dynamic> json) {
     final type = json['type'];
     
-    // 处理响应（包括 connect 响应）
-    if (type == 'res') {
-      final id = json['id'];
-      final ok = json['ok'] ?? false;
-      
-      if (!ok) {
-        final error = json['error'] ?? '请求失败';
-        print('Gateway 错误: $error');
-        if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
-          _connectCompleter!.completeError(Exception(error));
-        }
-        return;
-      }
-      
-      // 检查是否是 connect 响应
-      if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
-        _isConnected = true;
-        _stateController.add(GatewayConnectionState.connected);
-        _connectCompleter!.complete();
-      }
-      return;
-    }
-    
-    // 处理事件（流式响应）
+    // 处理事件（包括 challenge）
     if (type == 'event') {
       final event = json['event'];
       final payload = json['payload'] ?? {};
+      
+      if (event == 'connect.challenge') {
+        // 保存 challenge nonce
+        _challengeNonce = payload['nonce']?.toString();
+        // 重新发送 connect 请求（包含 nonce）
+        _sendConnectRequest(_token);
+        return;
+      }
       
       if (event == 'chat.chunk') {
         // 流式响应片段
@@ -228,6 +249,28 @@ class GatewayClient {
           content: '❌ $errorMsg',
           timestamp: DateTime.now(),
         ));
+      }
+      return;
+    }
+    
+    // 处理响应（包括 connect 响应）
+    if (type == 'res') {
+      final ok = json['ok'] ?? false;
+      
+      if (!ok) {
+        final error = json['error'] ?? '请求失败';
+        print('Gateway 错误: $error');
+        if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
+          _connectCompleter!.completeError(Exception(error));
+        }
+        return;
+      }
+      
+      // 检查是否是 connect 响应
+      if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
+        _isConnected = true;
+        _stateController.add(GatewayConnectionState.connected);
+        _connectCompleter!.complete();
       }
     }
   }
