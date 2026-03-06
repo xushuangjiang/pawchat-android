@@ -8,8 +8,33 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Run Tests
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install test dependencies
+        run: pip install websocket-client
+      
+      - name: Run protocol validation test
+        run: python3 test/gateway_protocol_test.py
+        continue-on-error: true
+      
+      - name: Run WebChat compatibility test
+        run: python3 test/webchat_validation_test.py
+        continue-on-error: true
+
   build:
     runs-on: ubuntu-latest
+    needs: test
+    name: Build APK
 
     steps:
       - uses: actions/checkout@v4
@@ -24,13 +49,6 @@ jobs:
           flutter pub upgrade
           flutter pub get
 
-      # 暂时跳过代码分析，因为有 warnings 会导致构建失败
-      # - name: Analyze code
-      #   run: flutter analyze --no-fatal-warnings --no-fatal-infos
-
-      # - name: Run tests
-      #   run: flutter test
-
       - name: Build APK
         run: flutter build apk --release --split-per-abi
 
@@ -38,4 +56,34 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pawchat-apks
-          path: build/app/outputs/flutter-apk/app-*64*.apk
+          path: build/app/outputs/flutter-apk/app-*-release.apk
+          retention-days: 30
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    name: Create Release
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download APK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pawchat-apks
+          path: apks/
+      
+      - name: Display structure
+        run: ls -R apks/
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: apks/*.apk
+          draft: true
+          prerelease: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
