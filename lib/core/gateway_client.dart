@@ -107,7 +107,7 @@ class GatewayClient {
           'id': 'cli',
           'version': AppVersion.version,
           'platform': 'android',
-          'mode': 'operator',
+          'mode': 'cli',
         },
         'role': 'operator',
         'scopes': ['operator.read', 'operator.write'],
