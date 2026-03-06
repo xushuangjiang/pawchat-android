@@ -103,10 +103,10 @@ class GatewayClient {
         'minProtocol': 3,
         'maxProtocol': 3,
         'client': {
-          'id': 'cli',  // 必须使用标准 client id
-          'version': '0.1.2',
+          'id': 'cli',
+          'version': '0.1.3',
           'platform': 'android',
-          'mode': 'operator',
+          'mode': 'headless',
         },
         'role': 'operator',
         'scopes': ['operator.read', 'operator.write'],
@@ -116,14 +116,8 @@ class GatewayClient {
         if (token != null && token.isNotEmpty)
           'auth': {'token': token},
         'locale': 'zh-CN',
-        'userAgent': 'PawChat/0.1.2',
-        'device': {
-          'id': deviceId,
-          'publicKey': '',  // 简化处理，不实现签名
-          'signature': '',
-          'signedAt': now,
-          if (_challengeNonce != null) 'nonce': _challengeNonce,
-        },
+        'userAgent': 'PawChat/0.1.3',
+        // 暂时不发送 device 字段，避免签名验证
       },
     };
     
