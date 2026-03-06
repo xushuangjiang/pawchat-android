@@ -1,90 +1,56 @@
 # PawChat
 
-基于 OpenClaw Gateway WebSocket 的 Android 聊天客户端
+基于 OpenClaw Gateway WebSocket 的 Android 聊天客户端 (Alpha)
 
-## 📱 简介
+## ⚠️ 版本状态
 
-PawChat 是一个简洁的 Android 聊天应用，让你可以通过手机与 OpenClaw Agent 进行实时对话。
+**v0.1.0 Alpha** - 早期测试版本，功能尚未完善
 
-## ✨ 功能特性
+## ✨ 当前功能
 
-- 🔌 **WebSocket 连接** - 实时连接 OpenClaw Gateway
-- 💬 **消息收发** - 支持流式响应，实时显示 AI 回复
-- 💾 **本地缓存** - 消息本地存储，重启后保留
+- 🔌 **WebSocket 连接** - 连接 OpenClaw Gateway
+- 💬 **消息收发** - 支持流式响应
+- 💾 **本地缓存** - 消息本地存储
 - 🎨 **深色主题** - 自动适配系统主题
-- ⚙️ **灵活配置** - 自定义 Gateway URL 和 Token
+- ⚙️ **Gateway 配置** - 自定义 URL 和 Token
 
 ## 📥 安装
 
-从 [Releases](https://github.com/xushuangjiang/pawchat-android/releases) 页面下载最新 APK：
+从 [Releases](https://github.com/xushuangjiang/pawchat-android/releases) 下载 APK：
 
-- `app-arm64-v8a-release.apk` - 适用于大多数现代 Android 手机
-- `app-x86_64-release.apk` - 适用于 x86_64 模拟器
+```bash
+# ARM64 设备（大多数手机）
+adb install app-arm64-v8a-release.apk
+
+# x86_64 模拟器
+adb install app-x86_64-release.apk
+```
 
 ## 🚀 使用方法
 
-1. **安装应用**
-   ```bash
-   adb install app-arm64-v8a-release.apk
-   ```
+1. 打开应用
+2. 点击右上角 **设置** 图标
+3. 输入 Gateway URL（如：`192.168.1.100:18789`）
+4. 点击 **连接**
+5. 返回聊天界面开始对话
 
-2. **配置 Gateway**
-   - 打开应用，点击右上角设置图标
-   - 输入 Gateway URL（例如：`192.168.1.100:18789`）
-   - 如有需要，输入 Token
-   - 点击"连接"
-
-3. **开始聊天**
-   - 返回主界面
-   - 在底部输入框输入消息
-   - 点击发送按钮
-
-## 🏗️ 技术栈
-
-- **Flutter** 3.24.0
-- **Dart** 3.0+
-- **WebSocket** - 实时通信
-- **SharedPreferences** - 本地数据持久化
-
-## 🛠️ 开发构建
+## 🛠️ 开发
 
 ```bash
-# 克隆仓库
-git clone https://github.com/xushuangjiang/pawchat-android.git
-cd pawchat-android
-
-# 获取依赖
 flutter pub get
-
-# 运行调试版本
 flutter run
-
-# 构建发布版本
 flutter build apk --release
 ```
 
-## 📋 项目状态
+## 📝 项目信息
 
-当前版本：**v0.1.0 (Alpha)**
+- **Flutter**: 3.24.0
+- **依赖**: web_socket_channel, shared_preferences
+- **架构**: 简化状态管理（无 BLoC）
 
-### ✅ 已实现
-- [x] WebSocket 连接与认证
-- [x] 消息收发（流式响应）
-- [x] 本地消息缓存
-- [x] 深色主题支持
-- [x] Gateway 配置
+## ⚠️ 已知问题
 
-### 🚧 待实现
-- [ ] 多会话管理
-- [ ] 附件上传（图片、文件）
-- [ ] 推送通知
-- [ ] 网络自动重连
-- [ ] 消息搜索
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 PR！
-
-## 📄 许可证
-
-MIT License
+- 多会话功能待实现
+- 附件上传待实现
+- 推送通知待实现
+- 网络重连机制待优化
