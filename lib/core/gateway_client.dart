@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'message_model.dart';
+import 'version.dart';
 
 /// 连接状态
 enum GatewayConnectionState { disconnected, connecting, connected, error }
@@ -104,7 +105,7 @@ class GatewayClient {
         'maxProtocol': 3,
         'client': {
           'id': 'cli',
-          'version': '0.1.3',
+          'version': AppVersion.version,
           'platform': 'android',
           'mode': 'headless',
         },
@@ -116,7 +117,7 @@ class GatewayClient {
         if (token != null && token.isNotEmpty)
           'auth': {'token': token},
         'locale': 'zh-CN',
-        'userAgent': 'PawChat/0.1.3',
+        'userAgent': 'PawChat/${AppVersion.version}',
         // 暂时不发送 device 字段，避免签名验证
       },
     };

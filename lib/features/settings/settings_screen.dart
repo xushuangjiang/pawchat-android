@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/gateway_client.dart';
+import '../../core/version.dart';
 
 class SettingsScreen extends StatefulWidget {
   final GatewayClient client;
@@ -281,7 +282,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.info_outline),
                   title: const Text('关于 PawChat'),
-                  subtitle: const Text('版本 v0.1.1\n基于 OpenClaw Gateway'),
+                  subtitle: Text('版本 ${AppVersion.fullVersion}\n基于 OpenClaw Gateway'),
                 ),
                 const Divider(height: 1),
                 ListTile(
