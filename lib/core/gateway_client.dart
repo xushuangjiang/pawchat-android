@@ -26,7 +26,7 @@ class GatewayClient {
     
     _url = url;
     _token = token;
-    _stateController.add(ConnectionState.connecting);
+    _stateController.add(GatewayConnectionState.connecting);
     
     try {
       // 构建连接 URL
@@ -38,11 +38,11 @@ class GatewayClient {
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
       await _channel!.ready;
       
-      _stateController.add(ConnectionState.connected);
+      _stateController.add(GatewayConnectionState.connected);
       _listen();
       
     } catch (e) {
-      _stateController.add(ConnectionState.error);
+      _stateController.add(GatewayConnectionState.error);
       throw Exception('连接失败: $e');
     }
   }
@@ -51,7 +51,7 @@ class GatewayClient {
   Future<void> disconnect() async {
     await _channel?.sink.close();
     _channel = null;
-    _stateController.add(ConnectionState.disconnected);
+    _stateController.add(GatewayConnectionState.disconnected);
   }
   
   /// 发送消息
@@ -89,10 +89,10 @@ class GatewayClient {
         }
       },
       onError: (error) {
-        _stateController.add(ConnectionState.error);
+        _stateController.add(GatewayConnectionState.error);
       },
       onDone: () {
-        _stateController.add(ConnectionState.disconnected);
+        _stateController.add(GatewayConnectionState.disconnected);
       },
     );
   }
