@@ -19,6 +19,7 @@ class GatewayClient {
   String? _sessionKey;
   int _messageId = 0;
   bool _isConnected = false;
+  Completer<void>? _connectCompleter;
   
   Stream<GatewayConnectionState> get stateStream => _stateController.stream;
   Stream<Message> get messageStream => _messageController.stream;
@@ -46,10 +47,11 @@ class GatewayClient {
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
       await _channel!.ready;
       
-      // 发送 connect 请求（OpenClaw Protocol）
-      await _sendConnectRequest(token);
-      
+      // 开始监听（必须在发送 connect 之前）
       _listen();
+      
+      // 发送 connect 请求并等待响应
+      await _sendConnectRequest(token);
       
     } catch (e) {
       _stateController.add(GatewayConnectionState.error);
@@ -59,9 +61,11 @@ class GatewayClient {
   
   /// 发送 connect 请求（Protocol v3）
   Future<void> _sendConnectRequest(String? token) async {
+    final connectId = _generateId();
+    
     final request = {
       'type': 'req',
-      'id': _generateId(),
+      'id': connectId,
       'method': 'connect',
       'params': {
         'minProtocol': 3,
@@ -81,17 +85,25 @@ class GatewayClient {
       },
     };
     
+    // 创建 completer 等待响应
+    _connectCompleter = Completer<void>();
+    
     _channel!.sink.add(jsonEncode(request));
     
-    // 等待连接响应（简单处理，实际应该监听响应）
-    await Future.delayed(const Duration(milliseconds: 500));
-    _isConnected = true;
-    _stateController.add(GatewayConnectionState.connected);
+    // 等待响应，超时 10 秒
+    await _connectCompleter!.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        throw Exception('连接超时：Gateway 未响应');
+      },
+    );
   }
   
   /// 断开连接
   Future<void> disconnect() async {
     _isConnected = false;
+    _connectCompleter?.completeError('Disconnected');
+    _connectCompleter = null;
     await _channel?.sink.close();
     _channel = null;
     _stateController.add(GatewayConnectionState.disconnected);
@@ -150,10 +162,14 @@ class GatewayClient {
       onError: (error) {
         _isConnected = false;
         _stateController.add(GatewayConnectionState.error);
+        _connectCompleter?.completeError(error);
       },
       onDone: () {
         _isConnected = false;
         _stateController.add(GatewayConnectionState.disconnected);
+        if (!_connectCompleter!.isCompleted) {
+          _connectCompleter?.completeError('Connection closed');
+        }
       },
     );
   }
@@ -161,6 +177,29 @@ class GatewayClient {
   /// 处理收到的消息
   void _handleMessage(Map<String, dynamic> json) {
     final type = json['type'];
+    
+    // 处理响应（包括 connect 响应）
+    if (type == 'res') {
+      final id = json['id'];
+      final ok = json['ok'] ?? false;
+      
+      if (!ok) {
+        final error = json['error'] ?? '请求失败';
+        print('Gateway 错误: $error');
+        if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
+          _connectCompleter!.completeError(Exception(error));
+        }
+        return;
+      }
+      
+      // 检查是否是 connect 响应
+      if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
+        _isConnected = true;
+        _stateController.add(GatewayConnectionState.connected);
+        _connectCompleter!.complete();
+      }
+      return;
+    }
     
     // 处理事件（流式响应）
     if (type == 'event') {
@@ -189,14 +228,6 @@ class GatewayClient {
           content: '❌ $errorMsg',
           timestamp: DateTime.now(),
         ));
-      }
-    }
-    // 处理响应
-    else if (type == 'res') {
-      final ok = json['ok'];
-      if (!ok) {
-        final error = json['error'] ?? '请求失败';
-        print('Gateway 错误: $error');
       }
     }
   }
