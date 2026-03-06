@@ -211,6 +211,156 @@ class GatewayClient {
     _channel!.sink.add(jsonEncode(request));
   }
   
+  /// 修改会话 (webchat 支持)
+  void patchSession(String sessionKey, {String? title}) {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'sessions.patch',
+      'params': {
+        'key': sessionKey,
+        if (title != null) 'title': title,
+      },
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
+  /// 获取健康状态 (webchat 支持)
+  void getHealth() {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'health',
+      'params': {},
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
+  /// 获取状态 (webchat 支持)
+  void getStatus() {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'status',
+      'params': {},
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
+  /// 获取配置 (webchat 支持)
+  void getConfig() {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'config.get',
+      'params': {},
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
+  /// 设置配置 (webchat 支持)
+  void setConfig(String path, dynamic value) {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'config.set',
+      'params': {
+        'path': path,
+        'value': value,
+      },
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
+  /// 获取模型列表 (webchat 支持)
+  void getModels() {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'models.list',
+      'params': {},
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
+  /// 获取代理列表 (webchat 支持)
+  void getAgents() {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'agents.list',
+      'params': {},
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
+  /// 获取节点列表 (webchat 支持)
+  void getNodes() {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'node.list',
+      'params': {},
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
+  /// 获取渠道状态 (webchat 支持)
+  void getChannelsStatus() {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'channels.status',
+      'params': {},
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
   /// 发送聊天消息
   void sendMessage(String content, {String? sessionKey}) {
     if (!_isConnected || _channel == null) {
