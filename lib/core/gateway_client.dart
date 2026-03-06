@@ -138,13 +138,32 @@ class GatewayClient {
     _stateController.add(GatewayConnectionState.disconnected);
   }
   
-  /// 发送聊天消息
-  void sendMessage(String content, {String? sessionKey}) async {
+  /// 获取聊天历史
+  void getChatHistory({String? sessionKey, int limit = 50}) {
     if (!_isConnected || _channel == null) {
       throw Exception('未连接到 Gateway');
     }
     
-    // 如果没有指定 sessionKey，创建新会话
+    final request = {
+      'type': 'req',
+      'id': _generateId(),
+      'method': 'chat.history',
+      'params': {
+        if (sessionKey != null) 'sessionKey': sessionKey,
+        'limit': limit,
+      },
+    };
+    
+    _channel!.sink.add(jsonEncode(request));
+  }
+  
+  /// 发送聊天消息
+  void sendMessage(String content, {String? sessionKey}) {
+    if (!_isConnected || _channel == null) {
+      throw Exception('未连接到 Gateway');
+    }
+    
+    // 如果没有指定 sessionKey，使用当前会话或创建新会话
     _sessionKey ??= 'session-${DateTime.now().millisecondsSinceEpoch}';
     if (sessionKey != null) {
       _sessionKey = sessionKey;
@@ -244,6 +263,18 @@ class GatewayClient {
           content: '❌ $errorMsg',
           timestamp: DateTime.now(),
         ));
+      } else if (event == 'chat.history') {
+        // 历史消息
+        final history = payload['history'] as List? ?? [];
+        for (final msg in history) {
+          final role = msg['role'] == 'user' ? MessageRole.user : MessageRole.assistant;
+          _messageController.add(Message(
+            id: msg['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+            role: role,
+            content: msg['content'] ?? '',
+            timestamp: DateTime.tryParse(msg['timestamp'] ?? '') ?? DateTime.now(),
+          ));
+        }
       }
       return;
     }
