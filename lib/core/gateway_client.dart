@@ -4,18 +4,18 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'message_model.dart';
 
 /// 连接状态
-enum ConnectionState { disconnected, connecting, connected, error }
+enum GatewayConnectionState { disconnected, connecting, connected, error }
 
 /// Gateway WebSocket 客户端
 class GatewayClient {
   WebSocketChannel? _channel;
-  final _stateController = StreamController<ConnectionState>.broadcast();
+  final _stateController = StreamController<GatewayConnectionState>.broadcast();
   final _messageController = StreamController<Message>.broadcast();
   
   String? _url;
   String? _token;
   
-  Stream<ConnectionState> get stateStream => _stateController.stream;
+  Stream<GatewayConnectionState> get stateStream => _stateController.stream;
   Stream<Message> get messageStream => _messageController.stream;
   
   /// 连接到 Gateway

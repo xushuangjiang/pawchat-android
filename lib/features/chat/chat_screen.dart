@@ -17,7 +17,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
   
   List<Message> _messages = [];
-  ConnectionState _connectionState = ConnectionState.disconnected;
+  GatewayConnectionState _connectionState = GatewayConnectionState.disconnected;
   bool _isStreaming = false;
   String _streamingContent = '';
   
@@ -138,15 +138,15 @@ class _ChatScreenState extends State<ChatScreen> {
     IconData icon;
     
     switch (_connectionState) {
-      case ConnectionState.connected:
+      case GatewayConnectionState.connected:
         color = Colors.green;
         icon = Icons.circle;
         break;
-      case ConnectionState.connecting:
+      case GatewayConnectionState.connecting:
         color = Colors.orange;
         icon = Icons.pending;
         break;
-      case ConnectionState.error:
+      case GatewayConnectionState.error:
         color = Colors.red;
         icon = Icons.error;
         break;

@@ -171,7 +171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(width: 8),
                       OutlinedButton.icon(
                         onPressed: _disconnect,
-                        icon: const Icon(Icons.disconnect),
+                        icon: const Icon(Icons.link_off),
                         label: const Text('断开'),
                       ),
                     ],
