@@ -18,7 +18,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isConnecting = false;
   String? _error;
   String _gatewayUrl = 'ws://192.168.0.213:18789';
-  String? _token;
+  // 测试用 token - 生产环境应该让用户输入
+  final String? _token = '989674d657564edbc29ef906489fba9e742f5b782273d331';
 
   @override
   void initState() {
