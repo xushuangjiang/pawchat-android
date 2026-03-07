@@ -29,10 +29,10 @@ class _ChatScreenState extends State<ChatScreen> {
   void _setupListeners() {
     _client.stateStream.listen((state) {
       setState(() {
-        _isConnecting = state == ConnectionState.connecting;
-        if (state == ConnectionState.error) {
+        _isConnecting = state == GatewayConnectionState.connecting;
+        if (state == GatewayConnectionState.error) {
           _error = '连接失败';
-        } else if (state == ConnectionState.connected) {
+        } else if (state == GatewayConnectionState.connected) {
           _error = null;
         }
       });

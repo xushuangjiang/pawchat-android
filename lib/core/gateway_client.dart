@@ -4,34 +4,34 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'message.dart';
 
 /// Gateway 连接状态
-enum ConnectionState { disconnected, connecting, connected, error }
+enum GatewayConnectionState { disconnected, connecting, connected, error }
 
 /// Gateway WebSocket 客户端 - 简化版
 class GatewayClient {
   WebSocketChannel? _channel;
-  final _stateController = StreamController<ConnectionState>.broadcast();
+  final _stateController = StreamController<GatewayConnectionState>.broadcast();
   final _messageController = StreamController<Message>.broadcast();
   
-  ConnectionState _state = ConnectionState.disconnected;
+  GatewayConnectionState _state = GatewayConnectionState.disconnected;
   int _msgId = 0;
   String? _sessionKey;
   String? _challengeNonce;
   
-  Stream<ConnectionState> get stateStream => _stateController.stream;
+  Stream<GatewayConnectionState> get stateStream => _stateController.stream;
   Stream<Message> get messageStream => _messageController.stream;
-  ConnectionState get state => _state;
-  bool get isConnected => _state == ConnectionState.connected;
+  GatewayConnectionState get state => _state;
+  bool get isConnected => _state == GatewayConnectionState.connected;
 
   /// 生成消息 ID
   String _nextId() => 'msg-${++_msgId}';
 
   /// 连接到 Gateway
   Future<void> connect(String url, {String? token}) async {
-    if (_state == ConnectionState.connecting || _state == ConnectionState.connected) {
+    if (_state == GatewayConnectionState.connecting || _state == GatewayConnectionState.connected) {
       await disconnect();
     }
     
-    _setState(ConnectionState.connecting);
+    _setState(GatewayConnectionState.connecting);
     
     try {
       final wsUrl = url.startsWith('ws') ? url : 'ws://$url';
@@ -42,11 +42,11 @@ class GatewayClient {
         _onMessage,
         onError: (e) {
           print('WebSocket error: $e');
-          _setState(ConnectionState.error);
+          _setState(GatewayConnectionState.error);
         },
         onDone: () {
           print('WebSocket closed');
-          _setState(ConnectionState.disconnected);
+          _setState(GatewayConnectionState.disconnected);
         },
       );
       
@@ -55,7 +55,7 @@ class GatewayClient {
       
     } catch (e) {
       print('Connect error: $e');
-      _setState(ConnectionState.error);
+      _setState(GatewayConnectionState.error);
       throw Exception('连接失败: $e');
     }
   }
@@ -94,7 +94,7 @@ class GatewayClient {
     
     // 等待连接成功
     for (var i = 0; i < 50; i++) {
-      if (_state == ConnectionState.connected) return;
+      if (_state == GatewayConnectionState.connected) return;
       await Future.delayed(const Duration(milliseconds: 100));
     }
     
@@ -134,7 +134,7 @@ class GatewayClient {
     await _channel?.sink.close();
     _channel = null;
     _challengeNonce = null;
-    _setState(ConnectionState.disconnected);
+    _setState(GatewayConnectionState.disconnected);
   }
 
   /// 发送数据
@@ -218,14 +218,14 @@ class GatewayClient {
     }
     
     // 连接成功
-    if (id.startsWith('msg-') && _state == ConnectionState.connecting) {
-      _setState(ConnectionState.connected);
+    if (id.startsWith('msg-') && _state == GatewayConnectionState.connecting) {
+      _setState(GatewayConnectionState.connected);
       print('Connected!');
     }
   }
 
   /// 设置状态
-  void _setState(ConnectionState state) {
+  void _setState(GatewayConnectionState state) {
     _state = state;
     _stateController.add(state);
   }
