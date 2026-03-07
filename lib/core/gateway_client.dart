@@ -27,7 +27,11 @@ class GatewayClient {
 
   /// 连接到 Gateway
   Future<void> connect(String url, {String? token}) async {
+    print('=== GatewayClient.connect() called ===');
+    print('URL: $url, Token: ${token != null ? "有" : "无"}');
+    
     if (_state == GatewayConnectionState.connecting || _state == GatewayConnectionState.connected) {
+      print('Disconnecting existing connection...');
       await disconnect();
     }
     
@@ -35,7 +39,10 @@ class GatewayClient {
     
     try {
       final wsUrl = url.startsWith('ws') ? url : 'ws://$url';
+      print('Connecting to WebSocket: $wsUrl');
+      
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      print('WebSocket channel created');
       
       // 监听消息
       _channel!.stream.listen(
@@ -50,8 +57,10 @@ class GatewayClient {
         },
       );
       
+      print('Waiting for challenge and sending connect...');
       // 等待 challenge 然后发送 connect
       await _waitAndConnect(token);
+      print('=== GatewayClient.connect() completed ===');
       
     } catch (e) {
       print('Connect error: $e');
@@ -146,6 +155,7 @@ class GatewayClient {
 
   /// 处理收到的消息
   void _onMessage(dynamic data) {
+    print('=== _onMessage received: $data ===');
     try {
       final json = jsonDecode(data as String);
       print('← Recv: $json');
@@ -170,6 +180,7 @@ class GatewayClient {
   void _handleEvent(Map<String, dynamic> json) {
     final event = json['event'];
     final payload = json['payload'] ?? {};
+    print('=== _handleEvent: $event ===');
     
     switch (event) {
       case 'connect.challenge':
