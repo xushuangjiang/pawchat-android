@@ -89,7 +89,7 @@ class GatewayClient {
           'id': 'openclaw-control-ui',
           'version': '1.0.0',
           'platform': 'android',
-          'mode': 'webchat',
+          'mode': 'cli',
         },
         'role': 'operator',
         'scopes': ['operator.read', 'operator.write'],
