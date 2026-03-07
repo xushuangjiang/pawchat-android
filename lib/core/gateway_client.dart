@@ -1,942 +1,235 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'message_model.dart';
-import 'version.dart';
+import 'message.dart';
 
-/// 连接状态
-enum GatewayConnectionState { disconnected, connecting, connected, error }
+/// Gateway 连接状态
+enum ConnectionState { disconnected, connecting, connected, error }
 
-/// Gateway WebSocket 客户端
-/// 
-/// 遵循 OpenClaw Gateway Protocol v3
+/// Gateway WebSocket 客户端 - 简化版
 class GatewayClient {
   WebSocketChannel? _channel;
-  final _stateController = StreamController<GatewayConnectionState>.broadcast();
+  final _stateController = StreamController<ConnectionState>.broadcast();
   final _messageController = StreamController<Message>.broadcast();
   
-  String? _url;
-  String? _token;
+  ConnectionState _state = ConnectionState.disconnected;
+  int _msgId = 0;
   String? _sessionKey;
-  String? _deviceId;
-  int _messageId = 0;
-  bool _isConnected = false;
-  Completer<void>? _connectCompleter;
   String? _challengeNonce;
   
-  Stream<GatewayConnectionState> get stateStream => _stateController.stream;
+  Stream<ConnectionState> get stateStream => _stateController.stream;
   Stream<Message> get messageStream => _messageController.stream;
-  bool get isConnected => _isConnected;
-  
-  /// 生成唯一消息 ID
-  String _generateId() {
-    return '${DateTime.now().millisecondsSinceEpoch}-${_messageId++}';
-  }
-  
-  /// 生成设备 ID
-  String _getDeviceId() {
-    _deviceId ??= 'pawchat-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(10000)}';
-    return _deviceId!;
-  }
-  
+  ConnectionState get state => _state;
+  bool get isConnected => _state == ConnectionState.connected;
+
+  /// 生成消息 ID
+  String _nextId() => 'msg-${++_msgId}';
+
   /// 连接到 Gateway
   Future<void> connect(String url, {String? token}) async {
-    if (_channel != null) {
+    if (_state == ConnectionState.connecting || _state == ConnectionState.connected) {
       await disconnect();
     }
     
-    _url = url;
-    _token = token;
-    _stateController.add(GatewayConnectionState.connecting);
+    _setState(ConnectionState.connecting);
     
     try {
-      // 构建 WebSocket URL
-      var wsUrl = url.startsWith('ws') ? url : 'ws://$url';
-      
+      final wsUrl = url.startsWith('ws') ? url : 'ws://$url';
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
-      await _channel!.ready;
       
-      // 开始监听（必须在发送 connect 之前）
-      _listen();
+      // 监听消息
+      _channel!.stream.listen(
+        _onMessage,
+        onError: (e) {
+          print('WebSocket error: $e');
+          _setState(ConnectionState.error);
+        },
+        onDone: () {
+          print('WebSocket closed');
+          _setState(ConnectionState.disconnected);
+        },
+      );
       
-      // 等待 challenge 或发送 connect 请求
-      await _waitForChallengeOrConnect(token);
+      // 等待 challenge 然后发送 connect
+      await _waitAndConnect(token);
       
     } catch (e) {
-      _stateController.add(GatewayConnectionState.error);
+      print('Connect error: $e');
+      _setState(ConnectionState.error);
       throw Exception('连接失败: $e');
     }
   }
-  
-  /// 等待 challenge 或直接发送 connect
-  Future<void> _waitForChallengeOrConnect(String? token) async {
-    // 创建 completer 等待响应
-    _connectCompleter = Completer<void>();
-    
-    // 给服务器一点时间发送 challenge
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    // 如果没有收到 challenge，直接发送 connect
-    if (_challengeNonce == null) {
-      await _sendConnectRequest(token);
+
+  /// 等待 challenge 并发送 connect
+  Future<void> _waitAndConnect(String? token) async {
+    // 等待最多 5 秒接收 challenge
+    for (var i = 0; i < 50; i++) {
+      if (_challengeNonce != null) break;
+      await Future.delayed(const Duration(milliseconds: 100));
     }
     
-    // 等待响应，超时 10 秒
-    await _connectCompleter!.future.timeout(
-      const Duration(seconds: 10),
-      onTimeout: () {
-        throw Exception('连接超时：Gateway 未响应');
-      },
-    );
-  }
-  
-  /// 发送 connect 请求（Protocol v3）
-  Future<void> _sendConnectRequest(String? token) async {
-    final deviceId = _getDeviceId();
-    final now = DateTime.now().millisecondsSinceEpoch;
-    
+    // 发送 connect 请求
     final request = {
       'type': 'req',
-      'id': _generateId(),
+      'id': _nextId(),
       'method': 'connect',
       'params': {
         'minProtocol': 3,
         'maxProtocol': 3,
         'client': {
-          'id': 'cli',
-          'version': AppVersion.version,
+          'id': 'pawchat',
+          'version': '1.0.0',
           'platform': 'android',
           'mode': 'cli',
         },
         'role': 'operator',
         'scopes': ['operator.read', 'operator.write'],
-        'caps': [],
-        'commands': [],
-        'permissions': {},
-        if (token != null && token.isNotEmpty)
-          'auth': {'token': token},
+        if (token != null) 'auth': {'token': token},
         'locale': 'zh-CN',
-        'userAgent': 'PawChat/${AppVersion.version}',
-        // 暂时不发送 device 字段，避免签名验证
+        'userAgent': 'PawChat/1.0.0',
       },
     };
     
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 断开连接
-  Future<void> disconnect() async {
-    _isConnected = false;
-    _challengeNonce = null;
-    if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
-      _connectCompleter!.completeError('Disconnected');
-    }
-    _connectCompleter = null;
-    await _channel?.sink.close();
-    _channel = null;
-    _stateController.add(GatewayConnectionState.disconnected);
-  }
-  
-  /// 获取聊天历史
-  void getChatHistory({String? sessionKey, int limit = 50}) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
+    _send(request);
+    
+    // 等待连接成功
+    for (var i = 0; i < 50; i++) {
+      if (_state == ConnectionState.connected) return;
+      await Future.delayed(const Duration(milliseconds: 100));
     }
     
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'chat.history',
-      'params': {
-        if (sessionKey != null) 'sessionKey': sessionKey,
-        'limit': limit,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
+    throw Exception('连接超时');
   }
-  
-  /// 获取会话列表
-  void getSessions({int limit = 50}) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
+
+  /// 发送消息到 Gateway
+  void sendMessage(String content) {
+    if (!isConnected) throw Exception('未连接');
     
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'sessions.list',
-      'params': {
-        'limit': limit,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 重置会话
-  void resetSession(String sessionKey) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'sessions.reset',
-      'params': {
-        'key': sessionKey,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 删除会话
-  void deleteSession(String sessionKey) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'sessions.delete',
-      'params': {
-        'key': sessionKey,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 修改会话 (webchat 支持)
-  void patchSession(String sessionKey, {String? title}) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'sessions.patch',
-      'params': {
-        'key': sessionKey,
-        if (title != null) 'title': title,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取健康状态 (webchat 支持)
-  void getHealth() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'health',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取状态 (webchat 支持)
-  void getStatus() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'status',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取配置 (webchat 支持)
-  void getConfig() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'config.get',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 设置配置 (webchat 支持)
-  void setConfig(String path, dynamic value) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'config.set',
-      'params': {
-        'path': path,
-        'value': value,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取模型列表 (webchat 支持)
-  void getModels() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'models.list',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取代理列表 (webchat 支持)
-  void getAgents() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'agents.list',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取节点列表 (webchat 支持)
-  void getNodes() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'node.list',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取渠道状态 (webchat 支持)
-  void getChannelsStatus() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'channels.status',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 渠道登出 (webchat 支持)
-  void channelsLogout(String channelId) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'channels.logout',
-      'params': {
-        'channelId': channelId,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取代理身份 (webchat 支持)
-  void getAgentIdentity(String agentId) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'agent.identity.get',
-      'params': {
-        'agentId': agentId,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取代理文件列表 (webchat 支持)
-  void getAgentFiles(String agentId) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'agents.files.list',
-      'params': {
-        'agentId': agentId,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取代理文件 (webchat 支持)
-  void getAgentFile(String agentId, String path) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'agents.files.get',
-      'params': {
-        'agentId': agentId,
-        'path': path,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 设置代理文件 (webchat 支持)
-  void setAgentFile(String agentId, String path, String content) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'agents.files.set',
-      'params': {
-        'agentId': agentId,
-        'path': path,
-        'content': content,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取工具目录 (webchat 支持)
-  void getToolsCatalog() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'tools.catalog',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取 Skills 状态 (webchat 支持)
-  void getSkillsStatus() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'skills.status',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 安装 Skill (webchat 支持)
-  void installSkill(String skillId, {String? version}) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'skills.install',
-      'params': {
-        'skillId': skillId,
-        if (version != null) 'version': version,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 更新 Skill (webchat 支持)
-  void updateSkill(String skillId, {String? version}) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'skills.update',
-      'params': {
-        'skillId': skillId,
-        if (version != null) 'version': version,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取使用成本 (webchat 支持)
-  void getUsageCost() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'usage.cost',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取会话使用情况 (webchat 支持)
-  void getSessionsUsage() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'sessions.usage',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取会话使用日志 (webchat 支持)
-  void getSessionsUsageLogs({int limit = 50}) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'sessions.usage.logs',
-      'params': {
-        'limit': limit,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取会话使用统计 (webchat 支持)
-  void getSessionsUsageTimeseries() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'sessions.usage.timeseries',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 应用配置 (webchat 支持)
-  void applyConfig() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'config.apply',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 运行更新 (webchat 支持)
-  void runUpdate() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'update.run',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 获取设备配对列表 (webchat 支持)
-  void getDevicePairList() {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'device.pair.list',
-      'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 批准设备配对 (webchat 支持)
-  void approveDevicePair(String requestId) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'device.pair.approve',
-      'params': {
-        'requestId': requestId,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 拒绝设备配对 (webchat 支持)
-  void rejectDevicePair(String requestId) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'device.pair.reject',
-      'params': {
-        'requestId': requestId,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 轮换设备令牌 (webchat 支持)
-  void rotateDeviceToken(String deviceId) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'device.token.rotate',
-      'params': {
-        'deviceId': deviceId,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 撤销设备令牌 (webchat 支持)
-  void revokeDeviceToken(String deviceId) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'device.token.revoke',
-      'params': {
-        'deviceId': deviceId,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 执行批准决议 (webchat 支持)
-  void resolveExecApproval(String id, String decision, {String? reason}) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'exec.approval.resolve',
-      'params': {
-        'id': id,
-        'decision': decision,
-        if (reason != null) 'reason': reason,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// Web 登录开始 (webchat 支持)
-  void webLoginStart(String channel, String userId) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'web.login.start',
-      'params': {
-        'channel': channel,
-        'userId': userId,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// Web 登录等待 (webchat 支持)
-  void webLoginWait(String requestId) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    final request = {
-      'type': 'req',
-      'id': _generateId(),
-      'method': 'web.login.wait',
-      'params': {
-        'requestId': requestId,
-      },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
-  }
-  
-  /// 发送聊天消息
-  void sendMessage(String content, {String? sessionKey}) {
-    if (!_isConnected || _channel == null) {
-      throw Exception('未连接到 Gateway');
-    }
-    
-    // 如果没有指定 sessionKey，使用当前会话或创建新会话
     _sessionKey ??= 'session-${DateTime.now().millisecondsSinceEpoch}';
-    if (sessionKey != null) {
-      _sessionKey = sessionKey;
-    }
     
-    final request = {
+    _send({
       'type': 'req',
-      'id': _generateId(),
+      'id': _nextId(),
       'method': 'chat.send',
       'params': {
         'content': content,
         'sessionKey': _sessionKey,
       },
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
+    });
   }
-  
+
   /// 中止当前响应
   void abort() {
-    if (!_isConnected || _channel == null) return;
-    
-    final request = {
+    if (!isConnected) return;
+    _send({
       'type': 'req',
-      'id': _generateId(),
+      'id': _nextId(),
       'method': 'chat.abort',
       'params': {},
-    };
-    
-    _channel!.sink.add(jsonEncode(request));
+    });
   }
-  
-  /// 监听消息
-  void _listen() {
-    _channel!.stream.listen(
-      (data) {
-        try {
-          final json = jsonDecode(data as String);
-          _handleMessage(json);
-        } catch (e) {
-          print('解析消息失败: $e');
-        }
-      },
-      onError: (error) {
-        _isConnected = false;
-        _stateController.add(GatewayConnectionState.error);
-        if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
-          _connectCompleter!.completeError(error);
-        }
-      },
-      onDone: () {
-        _isConnected = false;
-        _stateController.add(GatewayConnectionState.disconnected);
-        if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
-          _connectCompleter!.completeError('Connection closed');
-        }
-      },
-    );
+
+  /// 断开连接
+  Future<void> disconnect() async {
+    await _channel?.sink.close();
+    _channel = null;
+    _challengeNonce = null;
+    _setState(ConnectionState.disconnected);
   }
-  
+
+  /// 发送数据
+  void _send(Map<String, dynamic> data) {
+    final json = jsonEncode(data);
+    print('→ Send: $json');
+    _channel?.sink.add(json);
+  }
+
   /// 处理收到的消息
+  void _onMessage(dynamic data) {
+    try {
+      final json = jsonDecode(data as String);
+      print('← Recv: $json');
+      _handleMessage(json);
+    } catch (e) {
+      print('Parse error: $e');
+    }
+  }
+
+  /// 处理消息
   void _handleMessage(Map<String, dynamic> json) {
     final type = json['type'];
     
-    // 处理事件（包括 challenge）
     if (type == 'event') {
-      final event = json['event'];
-      final payload = json['payload'] ?? {};
-      
-      if (event == 'connect.challenge') {
-        // 保存 challenge nonce
+      _handleEvent(json);
+    } else if (type == 'res') {
+      _handleResponse(json);
+    }
+  }
+
+  /// 处理事件
+  void _handleEvent(Map<String, dynamic> json) {
+    final event = json['event'];
+    final payload = json['payload'] ?? {};
+    
+    switch (event) {
+      case 'connect.challenge':
         _challengeNonce = payload['nonce']?.toString();
-        // 重新发送 connect 请求（包含 nonce）
-        _sendConnectRequest(_token);
-        return;
-      }
-      
-      if (event == 'chat') {
-        // 聊天消息事件 (WebChat 实际使用的事件)
-        final msg = payload['message'] ?? {};
-        final role = msg['role'] == 'user' ? MessageRole.user : MessageRole.assistant;
-        final isStreaming = payload['streaming'] ?? false;
+        print('Got challenge: $_challengeNonce');
+        break;
         
-        if (isStreaming) {
-          // 流式响应
-          final content = msg['content'] ?? '';
-          _messageController.add(Message.assistantStreaming().copyWith(content: content));
-        } else {
-          // 完整消息
-          _messageController.add(Message(
-            id: msg['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
-            role: role,
-            content: msg['content'] ?? '',
-            timestamp: DateTime.tryParse(msg['timestamp'] ?? '') ?? DateTime.now(),
-          ));
-        }
-      } else if (event == 'chat.chunk') {
-        // 流式响应片段 (旧协议兼容)
-        final content = payload['content'] ?? '';
-        _messageController.add(Message.assistantStreaming().copyWith(content: content));
-      } else if (event == 'chat.complete') {
-        // 响应完成 (旧协议兼容)
-        final content = payload['content'] ?? '';
-        _messageController.add(Message(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          role: MessageRole.assistant,
-          content: content,
-          timestamp: DateTime.now(),
-        ));
-      } else if (event == 'chat.error') {
-        // 错误消息
-        final errorMsg = payload['error'] ?? '未知错误';
-        _messageController.add(Message(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          role: MessageRole.assistant,
-          content: '❌ $errorMsg',
-          timestamp: DateTime.now(),
-        ));
-      } else if (event == 'chat.history') {
-        // 历史消息
-        final history = payload['history'] as List? ?? [];
-        for (final msg in history) {
-          final role = msg['role'] == 'user' ? MessageRole.user : MessageRole.assistant;
-          _messageController.add(Message(
-            id: msg['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
-            role: role,
-            content: msg['content'] ?? '',
-            timestamp: DateTime.tryParse(msg['timestamp'] ?? '') ?? DateTime.now(),
-          ));
-        }
-      } else if (event == 'presence') {
-        // 设备在线状态更新
-        final entries = payload['entries'] as List? ?? [];
-        _messageController.add(Message.system('在线设备: ${entries.length}'));
-      } else if (event == 'heartbeat') {
-        // 心跳响应
-        print('收到心跳响应');
-      }
+      case 'chat':
+        _handleChatEvent(payload);
+        break;
+        
+      case 'presence':
+        print('Presence update: ${payload['entries']?.length} devices');
+        break;
+        
+      case 'heartbeat':
+        print('Heartbeat');
+        break;
+    }
+  }
+
+  /// 处理聊天事件
+  void _handleChatEvent(Map<String, dynamic> payload) {
+    final msg = payload['message'] ?? {};
+    final isStreaming = payload['streaming'] ?? false;
+    
+    final message = Message(
+      id: msg['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      role: msg['role'] ?? 'assistant',
+      content: msg['content'] ?? '',
+      timestamp: DateTime.now(),
+      isStreaming: isStreaming,
+    );
+    
+    _messageController.add(message);
+  }
+
+  /// 处理响应
+  void _handleResponse(Map<String, dynamic> json) {
+    final ok = json['ok'] ?? false;
+    final id = json['id'] ?? '';
+    
+    if (!ok) {
+      print('Error response: ${json['error']}');
       return;
     }
     
-    // 处理响应（包括 connect 响应）
-    if (type == 'res') {
-      final ok = json['ok'] ?? false;
-      
-      if (!ok) {
-        final error = json['error'] ?? '请求失败';
-        print('Gateway 错误: $error');
-        if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
-          _connectCompleter!.completeError(Exception(error));
-        }
-        return;
-      }
-      
-      // 检查是否是 connect 响应
-      if (_connectCompleter != null && !_connectCompleter!.isCompleted) {
-        _isConnected = true;
-        _stateController.add(GatewayConnectionState.connected);
-        _connectCompleter!.complete();
-      }
+    // 连接成功
+    if (id.startsWith('msg-') && _state == ConnectionState.connecting) {
+      _setState(ConnectionState.connected);
+      print('Connected!');
     }
   }
-  
+
+  /// 设置状态
+  void _setState(ConnectionState state) {
+    _state = state;
+    _stateController.add(state);
+  }
+
   void dispose() {
     disconnect();
     _stateController.close();

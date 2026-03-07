@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'features/chat/chat_screen.dart';
+import 'screens/chat_screen.dart';
 
 void main() {
   runApp(const PawChatApp());
@@ -15,14 +15,14 @@ class PawChatApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1),
+          seedColor: Colors.blue,
           brightness: Brightness.light,
         ),
         useMaterial3: true,
       ),
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1),
+          seedColor: Colors.blue,
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
