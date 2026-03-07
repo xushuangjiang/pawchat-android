@@ -86,7 +86,7 @@ class GatewayClient {
         'minProtocol': 3,
         'maxProtocol': 3,
         'client': {
-          'id': 'pawchat',
+          'id': 'openclaw-control-ui',
           'version': '1.0.0',
           'platform': 'android',
           'mode': 'webchat',
