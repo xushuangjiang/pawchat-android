@@ -77,6 +77,9 @@ class GatewayClient {
       await Future.delayed(const Duration(milliseconds: 100));
     }
     
+    // 生成设备 ID（基于 Android ID 或随机）
+    final deviceId = 'android-${DateTime.now().millisecondsSinceEpoch}';
+    
     // 发送 connect 请求
     final request = {
       'type': 'req',
@@ -96,6 +99,12 @@ class GatewayClient {
         if (token != null) 'auth': {'token': token},
         'locale': 'zh-CN',
         'userAgent': 'PawChat/1.0.0',
+        // 设备身份（必需）
+        'device': {
+          'id': deviceId,
+          'name': 'PawChat Android',
+          'type': 'mobile',
+        },
       },
     };
     
