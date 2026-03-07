@@ -5,7 +5,7 @@ import 'session_model.dart';
 /// 会话管理器
 class SessionManager {
   static const String _sessionsKey = 'sessions_list';
-  static const String _currentSessionKey = 'current_session_key';
+  static const String _currentSessionKeyPref = 'current_session_key';
   
   final List<Session> _sessions = [];
   String? _currentSessionKey;
@@ -39,7 +39,7 @@ class SessionManager {
       }
     }
     
-    _currentSessionKey = prefs.getString(_currentSessionKey);
+    _currentSessionKey = prefs.getString(_currentSessionKeyPref);
   }
 
   /// 保存会话列表
@@ -113,9 +113,9 @@ class SessionManager {
   Future<void> _saveCurrentSession() async {
     final prefs = await SharedPreferences.getInstance();
     if (_currentSessionKey != null) {
-      await prefs.setString(_currentSessionKey, _currentSessionKey!);
+      await prefs.setString(_currentSessionKeyPref, _currentSessionKey!);
     } else {
-      await prefs.remove(_currentSessionKey);
+      await prefs.remove(_currentSessionKeyPref);
     }
   }
 
