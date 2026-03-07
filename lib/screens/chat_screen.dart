@@ -125,13 +125,18 @@ class _ChatScreenState extends State<ChatScreen> {
               onChanged: (v) => _gatewayUrl = v,
             ),
             const SizedBox(height: 8),
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Token (可选)',
-                hintText: '留空则不认证',
-              ),
-              obscureText: true,
-              onChanged: (v) => _token = v.isEmpty ? null : v,
+            // Token 已硬编码，无需输入
+            // TextField(
+            //   decoration: const InputDecoration(
+            //     labelText: 'Token (可选)',
+            //     hintText: '留空则不认证',
+            //   ),
+            //   obscureText: true,
+            //   onChanged: (v) => _token = v.isEmpty ? null : v,
+            // ),
+            const Text(
+              'Token 已自动填充',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ],
         ),
