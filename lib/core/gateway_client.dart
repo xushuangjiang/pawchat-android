@@ -851,12 +851,31 @@ class GatewayClient {
         return;
       }
       
-      if (event == 'chat.chunk') {
-        // 流式响应片段
+      if (event == 'chat') {
+        // 聊天消息事件 (WebChat 实际使用的事件)
+        final msg = payload['message'] ?? {};
+        final role = msg['role'] == 'user' ? MessageRole.user : MessageRole.assistant;
+        final isStreaming = payload['streaming'] ?? false;
+        
+        if (isStreaming) {
+          // 流式响应
+          final content = msg['content'] ?? '';
+          _messageController.add(Message.assistantStreaming().copyWith(content: content));
+        } else {
+          // 完整消息
+          _messageController.add(Message(
+            id: msg['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+            role: role,
+            content: msg['content'] ?? '',
+            timestamp: DateTime.tryParse(msg['timestamp'] ?? '') ?? DateTime.now(),
+          ));
+        }
+      } else if (event == 'chat.chunk') {
+        // 流式响应片段 (旧协议兼容)
         final content = payload['content'] ?? '';
         _messageController.add(Message.assistantStreaming().copyWith(content: content));
       } else if (event == 'chat.complete') {
-        // 响应完成
+        // 响应完成 (旧协议兼容)
         final content = payload['content'] ?? '';
         _messageController.add(Message(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
