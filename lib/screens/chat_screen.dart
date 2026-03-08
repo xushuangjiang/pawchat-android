@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../core/gateway_client.dart';
 import '../core/message.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// 主聊天界面 - MVP 版本
 class ChatScreen extends StatefulWidget {
@@ -68,20 +70,31 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _connect() async {
+    // 写入调试日志到文件
+    await _writeDebugLog('_connect() CALLED at ${DateTime.now()}');
+    
     setState(() => _error = null);
+    
     // 显示连接提示
+    await _writeDebugLog('Showing SnackBar');
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('开始连接 Gateway...'), duration: Duration(seconds: 2)),
     );
+    
     try {
+      await _writeDebugLog('Calling _client.connect()');
       await _client.connect(_gatewayUrl, token: _token);
+      await _writeDebugLog('Connect completed!');
+      
       // 连接成功提示
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('连接成功!'), duration: Duration(seconds: 2)),
         );
+        await _writeDebugLog('Connection SUCCESS!');
       }
     } catch (e) {
+      await _writeDebugLog('Connect ERROR: $e');
       setState(() => _error = '连接失败：$e');
       // 显示错误提示
       if (mounted) {
@@ -89,6 +102,21 @@ class _ChatScreenState extends State<ChatScreen> {
           SnackBar(content: Text('连接失败：$e'), duration: const Duration(seconds: 3)),
         );
       }
+    }
+  }
+  
+  Future<void> _writeDebugLog(String message) async {
+    try {
+      final directory = await getExternalStorageDirectory();
+      if (directory != null) {
+        final file = File('${directory.path}/pawchat_debug.log');
+        await file.writeAsString(
+          '[${DateTime.now()}] $message\n',
+          mode: FileMode.append,
+        );
+      }
+    } catch (e) {
+      // 忽略日志写入错误
     }
   }
 
