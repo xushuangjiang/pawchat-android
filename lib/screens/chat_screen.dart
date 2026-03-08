@@ -190,9 +190,10 @@ class _ChatScreenState extends State<ChatScreen> {
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
+              print('=== Connect button pressed! ===');
               Navigator.pop(context);
-              _connect();
+              await _connect();
             },
             child: const Text('连接'),
           ),
