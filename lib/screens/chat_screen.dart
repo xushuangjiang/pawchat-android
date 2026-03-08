@@ -17,7 +17,8 @@ class _ChatScreenState extends State<ChatScreen> {
   final _messages = <Message>[];
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
-  bool _isConnecting = false;
+  bool _isConnecting = false;  // 用于显示全屏加载指示器
+  bool _isConnected = false;   // 连接成功状态
   String? _error;
   String _gatewayUrl = 'ws://192.168.0.213:18789';
   // 测试用 token - 生产环境应该让用户输入
@@ -31,17 +32,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _setupListeners() {
     _client.stateStream.listen((state) {
+      debugPrint('📡 Client state changed: $state');
       setState(() {
         _isConnecting = state == GatewayConnectionState.connecting;
+        _isConnected = state == GatewayConnectionState.connected;
         if (state == GatewayConnectionState.error) {
           _error = '连接失败';
+          debugPrint('❌ Connection error!');
         } else if (state == GatewayConnectionState.connected) {
           _error = null;
+          debugPrint('✅ Connection successful!');
         }
       });
     });
 
     _client.messageStream.listen((message) {
+      debugPrint('💬 Received message: ${message.role} - ${message.content.substring(0, 50)}...');
       setState(() {
         // 查找是否已有相同 ID 的流式消息
         final index = _messages.indexWhere((m) => m.id == message.id);
@@ -70,43 +76,35 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _connect() async {
-    debugPrint('🔌 _connect() CALLED');
-    // 写入调试日志到文件
+    debugPrint('🔴 === _connect() CALLED ===');
     await _writeDebugLog('_connect() CALLED at ${DateTime.now()}');
     
-    setState(() => _error = null);
+    // 检查 mounted 状态 (Critic 建议 C3)
+    if (!mounted) {
+      debugPrint('❌ Widget not mounted, aborting _connect()');
+      return;
+    }
     
-    // 显示连接提示
-    debugPrint('📱 Showing connection SnackBar...');
-    await _writeDebugLog('Showing SnackBar');
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('开始连接 Gateway...'), duration: Duration(seconds: 2)),
-    );
+    setState(() {
+      _error = null;
+      _isConnecting = true;  // 显示全屏加载指示器
+    });
     
     try {
-      debugPrint('🌐 Calling _client.connect() with URL: $_gatewayUrl');
-      await _writeDebugLog('Calling _client.connect()');
+      debugPrint('🌐 Connecting to: $_gatewayUrl');
+      await _writeDebugLog('Connecting to $_gatewayUrl');
       await _client.connect(_gatewayUrl, token: _token);
-      debugPrint('✅ _client.connect() completed!');
-      await _writeDebugLog('Connect completed!');
-      
-      // 连接成功提示
-      if (mounted) {
-        debugPrint('🎉 Connection SUCCESS - showing SnackBar');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('连接成功!'), duration: Duration(seconds: 2)),
-        );
-        await _writeDebugLog('Connection SUCCESS!');
-      }
+      debugPrint('✅ Connect completed!');
+      await _writeDebugLog('Connect success!');
     } catch (e) {
-      debugPrint('❌ Connect ERROR: $e');
-      await _writeDebugLog('Connect ERROR: $e');
-      setState(() => _error = '连接失败：$e');
-      // 显示错误提示
+      debugPrint('❌ Connect error: $e');
+      await _writeDebugLog('Connect error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('连接失败：$e'), duration: const Duration(seconds: 3)),
-        );
+        setState(() => _error = '连接失败：$e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isConnecting = false);
       }
     }
   }
@@ -200,10 +198,17 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           FilledButton(
             onPressed: () {
-              print('=== Connect button pressed! ===');
+              debugPrint('🔘 Connect button PRESSED!');
               Navigator.pop(context);
-              // 使用 Future.microtask 避免 context 失效问题
-              Future.microtask(() => _connect());
+              // 使用 addPostFrameCallback 确保在下一帧执行，并检查 mounted
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  debugPrint('🚀 Starting _connect() from callback');
+                  _connect();
+                } else {
+                  debugPrint('❌ Widget not mounted, cannot connect');
+                }
+              });
             },
             child: const Text('连接'),
           ),
@@ -236,12 +241,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   height: 8,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _client.isConnected ? Colors.green : Colors.red,
+                    color: _isConnected ? Colors.green : Colors.red,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  _client.isConnected ? '已连接' : '未连接',
+                  _isConnected ? '已连接' : '未连接',
                   style: const TextStyle(fontSize: 12),
                 ),
               ],
@@ -249,85 +254,113 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           // 连接按钮
           IconButton(
-            icon: Icon(_client.isConnected ? Icons.link_off : Icons.link),
-            onPressed: _client.isConnected
+            icon: Icon(_isConnected ? Icons.link_off : Icons.link),
+            onPressed: _isConnected
                 ? () => _client.disconnect()
                 : _showConnectDialog,
-            tooltip: _client.isConnected ? '断开' : '连接',
+            tooltip: _isConnected ? '断开' : '连接',
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // 错误提示
-          if (_error != null)
-            Container(
-              width: double.infinity,
-              color: Colors.red.shade100,
-              padding: const EdgeInsets.all(8),
-              child: Text(
-                _error!,
-                style: TextStyle(color: Colors.red.shade900),
-                textAlign: TextAlign.center,
-              ),
-            ),
-
-          // 连接中提示
-          if (_isConnecting)
-            const LinearProgressIndicator(),
-
-          // 消息列表
-          Expanded(
-            child: _messages.isEmpty
-                ? const Center(
-                    child: Text(
-                      '点击右上角连接按钮开始',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final msg = _messages[index];
-                      return _MessageBubble(message: msg);
-                    },
+          Column(
+            children: [
+              // 错误提示
+              if (_error != null)
+                Container(
+                  width: double.infinity,
+                  color: Colors.red.shade100,
+                  padding: const EdgeInsets.all(8),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(color: Colors.red.shade900),
+                    textAlign: TextAlign.center,
                   ),
-          ),
+                ),
 
-          // 输入框
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _textController,
-                      decoration: const InputDecoration(
-                        hintText: '输入消息...',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
+              // 连接中提示
+              if (_isConnecting)
+                const LinearProgressIndicator(),
+
+              // 消息列表
+              Expanded(
+                child: _messages.isEmpty
+                    ? const Center(
+                        child: Text(
+                          '点击右上角连接按钮开始',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _messages.length,
+                        itemBuilder: (context, index) {
+                          final msg = _messages[index];
+                          return _MessageBubble(message: msg);
+                        },
+                      ),
+              ),
+
+              // 输入框
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _textController,
+                          decoration: const InputDecoration(
+                            hintText: '输入消息...',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                          maxLines: null,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _sendMessage(),
+                          enabled: _isConnected,
                         ),
                       ),
-                      maxLines: null,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _sendMessage(),
-                      enabled: _client.isConnected,
+                      const SizedBox(width: 8),
+                      IconButton.filled(
+                        onPressed: _isConnected ? _sendMessage : null,
+                        icon: const Icon(Icons.send),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          // 全屏加载指示器 (Critic 建议 C4)
+          if (_isConnecting)
+            Container(
+              color: Colors.black54,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: _client.isConnected ? _sendMessage : null,
-                    icon: const Icon(Icons.send),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    const Text(
+                      '正在连接 Gateway...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
