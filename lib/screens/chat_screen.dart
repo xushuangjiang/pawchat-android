@@ -69,10 +69,26 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _connect() async {
     setState(() => _error = null);
+    // 显示连接提示
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('开始连接 Gateway...'), duration: Duration(seconds: 2)),
+    );
     try {
       await _client.connect(_gatewayUrl, token: _token);
+      // 连接成功提示
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('连接成功!'), duration: Duration(seconds: 2)),
+        );
+      }
     } catch (e) {
-      setState(() => _error = '连接失败: $e');
+      setState(() => _error = '连接失败：$e');
+      // 显示错误提示
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('连接失败：$e'), duration: const Duration(seconds: 3)),
+        );
+      }
     }
   }
 
