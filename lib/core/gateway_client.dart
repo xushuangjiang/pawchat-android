@@ -42,22 +42,27 @@ class GatewayClient {
       print('Connecting to WebSocket: $wsUrl');
       
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
-      print('WebSocket channel created');
+      print('🌐 WebSocket channel created');
+      
+      // 等待 WebSocket 连接 ready
+      print('⏳ Waiting for WebSocket ready...');
+      await _channel!.ready;
+      print('✅ WebSocket ready!');
       
       // 监听消息
       _channel!.stream.listen(
         _onMessage,
         onError: (e) {
-          print('WebSocket error: $e');
+          print('❌ WebSocket error: $e');
           _setState(GatewayConnectionState.error);
         },
         onDone: () {
-          print('WebSocket closed');
+          print('⚠️ WebSocket closed');
           _setState(GatewayConnectionState.disconnected);
         },
       );
       
-      print('Waiting for challenge and sending connect...');
+      print('📨 Waiting for challenge and sending connect...');
       // 等待 challenge 然后发送 connect
       await _waitAndConnect(token);
       print('=== GatewayClient.connect() completed ===');
@@ -72,13 +77,23 @@ class GatewayClient {
   /// 等待 challenge 并发送 connect
   Future<void> _waitAndConnect(String? token) async {
     // 等待最多 5 秒接收 challenge
+    print('⏳ Waiting for challenge (max 5s)...');
     for (var i = 0; i < 50; i++) {
       if (_challengeNonce != null) break;
       await Future.delayed(const Duration(milliseconds: 100));
     }
     
+    // 检查是否收到 challenge
+    if (_challengeNonce == null) {
+      print('❌ ERROR: No challenge received from Gateway');
+      _setState(GatewayConnectionState.error);
+      throw Exception('未收到 Gateway challenge，请检查网络连接');
+    }
+    print('✅ Challenge received: $_challengeNonce');
+    
     // 生成设备 ID（基于 Android ID 或随机）
     final deviceId = 'android-${DateTime.now().millisecondsSinceEpoch}';
+    print('📱 Device ID: $deviceId');
     
     // 发送 connect 请求
     final request = {

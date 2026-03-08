@@ -70,30 +70,36 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _connect() async {
+    debugPrint('🔌 _connect() CALLED');
     // 写入调试日志到文件
     await _writeDebugLog('_connect() CALLED at ${DateTime.now()}');
     
     setState(() => _error = null);
     
     // 显示连接提示
+    debugPrint('📱 Showing connection SnackBar...');
     await _writeDebugLog('Showing SnackBar');
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('开始连接 Gateway...'), duration: Duration(seconds: 2)),
     );
     
     try {
+      debugPrint('🌐 Calling _client.connect() with URL: $_gatewayUrl');
       await _writeDebugLog('Calling _client.connect()');
       await _client.connect(_gatewayUrl, token: _token);
+      debugPrint('✅ _client.connect() completed!');
       await _writeDebugLog('Connect completed!');
       
       // 连接成功提示
       if (mounted) {
+        debugPrint('🎉 Connection SUCCESS - showing SnackBar');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('连接成功!'), duration: Duration(seconds: 2)),
         );
         await _writeDebugLog('Connection SUCCESS!');
       }
     } catch (e) {
+      debugPrint('❌ Connect ERROR: $e');
       await _writeDebugLog('Connect ERROR: $e');
       setState(() => _error = '连接失败：$e');
       // 显示错误提示
@@ -114,9 +120,12 @@ class _ChatScreenState extends State<ChatScreen> {
           '[${DateTime.now()}] $message\n',
           mode: FileMode.append,
         );
+        debugPrint('📝 Log written: $message');
+      } else {
+        debugPrint('❌ Log failed: directory is null');
       }
     } catch (e) {
-      // 忽略日志写入错误
+      debugPrint('❌ Log ERROR: $e');
     }
   }
 
@@ -190,10 +199,11 @@ class _ChatScreenState extends State<ChatScreen> {
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () async {
+            onPressed: () {
               print('=== Connect button pressed! ===');
               Navigator.pop(context);
-              await _connect();
+              // 使用 Future.microtask 避免 context 失效问题
+              Future.microtask(() => _connect());
             },
             child: const Text('连接'),
           ),
