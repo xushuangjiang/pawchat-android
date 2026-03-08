@@ -96,6 +96,7 @@ class GatewayClient {
     print('📱 Device ID: $deviceId');
     
     // 发送 connect 请求
+    // 注意：当 dangerouslyDisableDeviceAuth=true 时，发送空的 device 对象
     final request = {
       'type': 'req',
       'id': _nextId(),
@@ -114,15 +115,12 @@ class GatewayClient {
         if (token != null) 'auth': {'token': token},
         'locale': 'zh-CN',
         'userAgent': 'PawChat/1.0.0',
-        // 设备身份（必需）
-        'device': {
-          'id': deviceId,
-          'name': 'PawChat Android',
-          'type': 'mobile',
-        },
+        // 空的 device 对象（当 dangerouslyDisableDeviceAuth=true 时）
+        'device': {},
       },
     };
     
+    print('📤 Sending connect request...');
     _send(request);
     
     // 等待连接成功
